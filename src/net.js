@@ -1,6 +1,8 @@
 /* Network helpers: API base, image upload with client-side downscale, AI streaming. */
 
-export const API = "https://pupka-api.kalakasanyt.workers.dev";
+const LOCAL = ["localhost", "127.0.0.1"].includes(location.hostname);
+if (LOCAL && new URLSearchParams(location.search).get("api") === "local") sessionStorage.setItem("pupka-api", "http://127.0.0.1:8787");
+export const API = (LOCAL && sessionStorage.getItem("pupka-api")) || "https://pupka-api.kalakasanyt.workers.dev";
 export const WS = API.replace(/^http/, "ws") + "/ws";
 
 export function shrinkImage(file, max = 1600, quality = 0.86) {

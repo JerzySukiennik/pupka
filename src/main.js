@@ -1,6 +1,6 @@
 /* Boot: connect the index, pick a person, route by hash, re-render on shared changes. */
 
-import { connectIndex, onChange, me, setMe, purgeOld, NAMES, card, state } from "./store.js";
+import { connectIndex, onChange, me, setMe, purgeOld, NAMES, card, state, warmCard } from "./store.js";
 import { renderPicker, renderHome, renderSubject, renderPlan, renderTrash, renderSettings, openSearch } from "./home.js";
 import { openCard } from "./card.js";
 
@@ -9,6 +9,7 @@ const provider = connectIndex();
 let current = null;
 let currentKey = "";
 let picking = false;
+let routeToken = 0;
 
 provider.once("sync", () => { setTimeout(purgeOld, 2000); });
 
@@ -29,7 +30,13 @@ function route(force) {
   if (current) { current.destroy && current.destroy(); current = null; }
   root.innerHTML = "";
   currentKey = key;
-  if (parts[0] === "c" && parts[1]) current = openCard(root, parts[1]);
+  const token = ++routeToken;
+  if (parts[0] === "c" && parts[1]) {
+    const id = parts[1];
+    root.innerHTML = `<div class="empty">Ładuję kartę…</div>`;
+    current = { destroy() {}, pending: true };
+    warmCard(id).then(() => { if (token === routeToken && me()) current = openCard(root, id); });
+  }
   else if (parts[0] === "s" && parts[1]) renderSubject(root, parts[1], q.tab);
   else if (parts[0] === "plan") renderPlan(root);
   else if (parts[0] === "trash") renderTrash(root);

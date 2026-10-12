@@ -65,30 +65,38 @@ async function anthropicStream(env, body, onEvent) {
   return { content, usage, stop };
 }
 
-async function searchImages(env, query, origin) {
+const UA = { "user-agent": "Pupka/1.0 (school notebook; gzowotesla@gmail.com)" };
+
+async function wikiPages(lang, params) {
+  const u = new URL(`https://${lang}.wikipedia.org/w/api.php`);
+  u.search = new URLSearchParams(Object.assign({ action: "query", prop: "pageimages|info", piprop: "thumbnail|name", pithumbsize: "1400", inprop: "url", redirects: "1", format: "json", origin: "*" }, params)).toString();
+  const r = await fetch(u, { headers: UA, signal: AbortSignal.timeout(6000) });
+  const j = await r.json().catch(() => ({}));
+  return Object.values((j.query && j.query.pages) || {}).filter((p) => p.thumbnail && !p.missing).sort((a, b) => (a.index || 0) - (b.index || 0))
+    .map((p) => ({ url: p.thumbnail.source, title: p.title, width: p.thumbnail.width, height: p.thumbnail.height, page: p.fullurl }));
+}
+
+async function searchImages(env, rawQuery, origin) {
+  const raw = String(rawQuery || "");
+  const cleaned = raw.replace(/\b(logo|obrazek|obrazki|zdjecie|zdjęcie|ilustracja|grafika|image|picture|photo|diagram)\b/gi, " ").replace(/\s+/g, " ").trim();
+  const query = cleaned || raw;
   const items = [];
   const seen = new Set();
   const push = (it) => { if (it && it.url && !seen.has(it.url)) { seen.add(it.url); items.push(it); } };
+  for (const lang of ["pl", "en"]) { try { (await wikiPages(lang, { titles: query })).forEach(push); } catch (e) { /* next */ } }
   for (const lang of ["pl", "en"]) {
-    try {
-      const u = new URL(`https://${lang}.wikipedia.org/w/api.php`);
-      u.search = new URLSearchParams({ action: "query", generator: "search", gsrsearch: query, gsrlimit: "4", prop: "pageimages|info", piprop: "thumbnail|name", pithumbsize: "1400", inprop: "url", format: "json", origin: "*" }).toString();
-      const r = await fetch(u, { headers: { "user-agent": "Pupka/1.0 (school notebook; gzowotesla@gmail.com)" }, signal: AbortSignal.timeout(6000) });
-      const j = await r.json().catch(() => ({}));
-      const pages = Object.values((j.query && j.query.pages) || {}).sort((a, b) => (a.index || 0) - (b.index || 0));
-      for (const pg of pages) if (pg.thumbnail && !/\.svg$/i.test(pg.pageimage || "")) push({ url: pg.thumbnail.source, title: pg.title, width: pg.thumbnail.width, height: pg.thumbnail.height, page: pg.fullurl });
-    } catch (e) { /* next source */ }
-    if (items.length >= 3) break;
+    if (items.length >= 4) break;
+    try { (await wikiPages(lang, { generator: "search", gsrsearch: query, gsrlimit: "3" })).slice(0, 2).forEach(push); } catch (e) { /* next */ }
   }
   if (items.length < 4) {
     try {
       const u = new URL("https://commons.wikimedia.org/w/api.php");
-      u.search = new URLSearchParams({ action: "query", generator: "search", gsrsearch: query + " filetype:bitmap", gsrnamespace: "6", gsrlimit: "8", prop: "imageinfo", iiprop: "url|size|mime", iiurlwidth: "1400", format: "json", origin: "*" }).toString();
-      const r = await fetch(u, { headers: { "user-agent": "Pupka/1.0 (school notebook; gzowotesla@gmail.com)" }, signal: AbortSignal.timeout(6000) });
+      u.search = new URLSearchParams({ action: "query", generator: "search", gsrsearch: query, gsrnamespace: "6", gsrlimit: "8", prop: "imageinfo", iiprop: "url|size|mime", iiurlwidth: "1400", format: "json", origin: "*" }).toString();
+      const r = await fetch(u, { headers: UA, signal: AbortSignal.timeout(6000) });
       const j = await r.json().catch(() => ({}));
       for (const p of Object.values((j.query && j.query.pages) || {})) {
         const ii = p.imageinfo && p.imageinfo[0];
-        if (ii && /jpeg|png/.test(ii.mime)) push({ url: ii.thumburl || ii.url, title: p.title.replace(/^File:/, ""), width: ii.thumbwidth || ii.width, height: ii.thumbheight || ii.height, page: ii.descriptionurl });
+        if (ii && /jpeg|png|svg|webp/.test(ii.mime) && ii.thumburl) push({ url: ii.thumburl, title: p.title.replace(/^File:/, ""), width: ii.thumbwidth || ii.width, height: ii.thumbheight || ii.height, page: ii.descriptionurl });
       }
     } catch (e) { /* no commons */ }
   }
@@ -123,6 +131,7 @@ export async function chat(req, env, origin, sse) {
   const context = [
     `AKTUALNA KARTA: przedmiot "${p.subject || "?"}", karta "${p.title || "(bez tematu)"}", data ${p.date || "?"}. Pyta: ${p.person || "?"}.`,
     `TREŚĆ KARTY (ponumerowane bloki):\n${String(p.blocks || "(pusta karta)").slice(0, 60000)}`,
+    p.drawings ? `RYSUNKI ODRĘCZNE NA KARCIE: ${String(p.drawings).slice(0, 600)}` : "RYSUNKI ODRĘCZNE NA KARCIE: brak",
     p.cards ? `INNE KARTY (id | przedmiot | data | temat):\n${String(p.cards).slice(0, 12000)}` : "",
     p.chatNote || ""
   ].filter(Boolean).join("\n\n");
@@ -151,6 +160,10 @@ export async function chat(req, env, origin, sse) {
           const items = await searchImages(env, String(t.input.query || "").slice(0, 200), origin);
           sse({ t: "images", items });
           result = items.length ? JSON.stringify(items) : "Nic nie znaleziono. Spróbuj innego zapytania lub powiedz użytkownikowi, że nie znalazłeś.";
+        } else if (t.name === "delete_drawings") {
+          sse({ t: "drawings", author: t.input.author ? String(t.input.author).slice(0, 20) : null });
+          edited = true;
+          result = "Rysunki usunięte z karty.";
         } else if (t.name === "edit_card") {
           const ops = Array.isArray(t.input.ops) ? t.input.ops.slice(0, 60) : [];
           sse({ t: "edit", ops });

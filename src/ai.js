@@ -46,7 +46,7 @@ export function applyEdits(editor, ops, bids) {
   return targets.length;
 }
 
-export function createAiPanel({ editor, entry, getCard, container, onEdited }) {
+export function createAiPanel({ editor, entry, getCard, container, onEdited, draw }) {
   const chat = entry.doc.getArray("chat");
   container.innerHTML = `
     <div class="ai-head">${icon("sparkle", 16)}<b>AI</b><span class="ai-sub">wspólny czat tej karty</span><button class="icon-btn ai-close" title="Zamknij (Cmd+J)">${icon("close", 16)}</button></div>
@@ -116,11 +116,12 @@ export function createAiPanel({ editor, entry, getCard, container, onEdited }) {
     try {
       await aiChat({
         messages: history, person: name, subject: sub ? sub.name : "", title: card.title, date: fmtDate(card.date),
-        blocks: docToBlocks(editor.state.doc), cards: cardsIndexText(card.id)
+        blocks: docToBlocks(editor.state.doc), cards: cardsIndexText(card.id), drawings: draw ? draw.summary() : ""
       }, (ev) => {
         if (ev.t === "delta") { acc += ev.text; textEl.innerHTML = mdToHtml(acc); msgs.scrollTop = msgs.scrollHeight; }
         else if (ev.t === "status") status.textContent = ev.text;
         else if (ev.t === "images") { images.push(...(ev.items || [])); }
+        else if (ev.t === "drawings") { if (!editor.isEditable) { acc += "\n(Nie mogę zmieniać rysunków na cudzej kartce.)"; return; } const n = draw ? draw.clearAll(ev.author) : 0; if (n) edited = true; status.textContent = n ? "rysunki usunięte" : "nie było rysunków"; }
         else if (ev.t === "edit") {
           if (!editor.isEditable) { acc += "\n(Nie mogę edytować tej karty: to nie twoja kartkówka.)"; return; }
           const n = applyEdits(editor, ev.ops || [], bids);

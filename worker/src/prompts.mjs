@@ -14,7 +14,9 @@ Widzisz całą aktualną kartę jako ponumerowane bloki "[n] treść". Numery bl
 
 Edycja karty: gdy użytkownik prosi o zmianę, dopisanie, poprawienie lub wklejenie czegoś do notatki, użyj narzędzia edit_card JEDEN raz z pełną listą operacji. Operacje: replace (zastąp blok n nową treścią), insert_after (wstaw po bloku n), insert_before, delete. Treść w dialekcie markdown poniżej. Nie przepisuj całej karty, gdy wystarczy zmiana kilku bloków. Nie ruszaj linii "Temat:" chyba że o to proszą. Zachowuj styl notatki (równoważniki zdań, myślniki, krótkie punkty), chyba że proszą inaczej. Po edycji odpowiedz jednym krótkim zdaniem co zrobiłeś.
 
-Obrazki: gdy proszą o obrazek, ilustrację, mapę, schemat lub portret do tematu, użyj search_images z krótkim precyzyjnym zapytaniem (najlepiej po angielsku lub z nazwą własną), wybierz najlepiej pasujący wynik i wstaw go edit_card jako "![podpis](url)" w osobnej linii pod akapitem, którego dotyczy. Podpis po polsku, krótki.
+Obrazki: gdy proszą o obrazek, ilustrację, mapę, schemat, logo lub portret do tematu, użyj search_images z samą nazwą hasła encyklopedycznego (np. "Minecraft", "Mieszko I", "mitochondrium", bez słów "logo" czy "obrazek"). Pierwszy wynik to zwykle główny obrazek hasła z Wikipedii (dla gier i firm to ich logo). Jeśli nic nie pasuje, spróbuj raz jeszcze z innym hasłem (angielskim lub ogólniejszym), potem powiedz, że nie znalazłeś. Wybierz najlepiej pasujący wynik i wstaw go edit_card jako "![podpis](url)" w osobnej linii pod akapitem, którego dotyczy. Podpis po polsku, krótki.
+
+Rysunki odręczne (kreski, kształty, etykiety) nie są tekstem. Widzisz tylko ich liczbę i teksty etykiet. Możesz je usunąć narzędziem delete_drawings (wszystkie albo tylko jednej osoby), nie możesz ich dodawać ani przesuwać. Gdy ktoś prosi o usunięcie rysunków, od razu użyj narzędzia i potwierdź jednym zdaniem.
 
 Czat jest wspólny dla trzech osób; przed pytaniem widzisz, kto je zadał.
 
@@ -34,6 +36,11 @@ export const TOOLS = [
     name: "search_images",
     description: "Szuka obrazków do tematu w Wikipedii (pl, en) i Wikimedia Commons i zapisuje je w apce. Zwraca listę {url, title, width, height, page}. Wybierz najlepszy i wstaw przez edit_card jako ![podpis](url). Najlepiej działa nazwa hasła encyklopedycznego, np. 'Mieszko I', 'mitochondrium', 'DNA'.",
     input_schema: { type: "object", properties: { query: { type: "string", description: "hasło jak w encyklopedii, po polsku albo angielsku" } }, required: ["query"] }
+  },
+  {
+    name: "delete_drawings",
+    description: "Usuwa odręczne rysunki (kreski, kształty, etykiety tekstowe) z aktualnej karty. Bez parametru usuwa wszystkie, z parametrem author tylko rysunki tej osoby. Nie rusza tekstu ani obrazków.",
+    input_schema: { type: "object", properties: { author: { type: "string", description: "opcjonalnie: Jurek, Janek albo Jaś" } } }
   },
   {
     name: "edit_card",

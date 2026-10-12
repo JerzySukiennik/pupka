@@ -162,6 +162,14 @@ export function closeCardDoc(id) {
   }, 4000);
 }
 
+export function warmCard(id) {
+  const e = openCardDoc(id);
+  const frag = e.doc.getXmlFragment("prosemirror");
+  const idb = Promise.race([e.idb.whenSynced, new Promise((r) => setTimeout(r, 1500))]);
+  const net = () => frag.length ? null : new Promise((res) => { if (e.provider.synced) return res(); e.provider.once("sync", res); setTimeout(res, 2500); });
+  return idb.then(net).then(() => { closeCardDoc(id); });
+}
+
 function xmlParagraph(text) {
   const p = new Y.XmlElement("paragraph");
   if (text) { const t = new Y.XmlText(); t.insert(0, text); p.insert(0, [t]); }

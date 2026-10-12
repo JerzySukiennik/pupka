@@ -485,6 +485,19 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     hasSelection() { return st.selection.size > 0; },
     selectAll() { st.selection = new Set(strokes.keys()); drawSelection(); },
     count() { return strokes.size; },
+    clearAll(author) {
+      const ids = [];
+      strokes.forEach((s, id) => { if (!author || s.by === author) ids.push(id); });
+      if (ids.length) ydoc.transact(() => ids.forEach((id) => strokes.delete(id)), "draw");
+      clearSelection();
+      return ids.length;
+    },
+    summary() {
+      if (!strokes.size) return "";
+      const by = {}, labels = [];
+      strokes.forEach((s) => { by[s.by || "?"] = (by[s.by || "?"] || 0) + 1; if (s.t === "label" && s.txt) labels.push(String(s.txt).slice(0, 40)); });
+      return `${strokes.size} elementów (${Object.entries(by).map(([k, v]) => `${k}: ${v}`).join(", ")})` + (labels.length ? `; etykiety: ${labels.slice(0, 15).join(" | ")}` : "");
+    },
     rerender: schedule,
     destroy() {
       ro.disconnect();

@@ -109,7 +109,7 @@ export function openCard(root, id) {
   const pmEl = editorEl.querySelector(".ProseMirror");
 
   const draw = createDraw({ pageEl, pmEl, ydoc: entry.doc, provider: entry.provider, name, color: prof.color || "#111", canEdit: () => canEdit, onChange: syncDrawUi });
-  const aiPanel = createAiPanel({ editor, entry, getCard: () => getCard(id) || c, container: view.querySelector(".ai-panel"), onEdited: () => draw.rerender() });
+  const aiPanel = createAiPanel({ editor, entry, getCard: () => getCard(id) || c, container: view.querySelector(".ai-panel"), onEdited: () => draw.rerender(), draw });
   const selMenu = createSelectionMenu({ editor, aiPanel, isDrawing: () => draw.isActive() });
 
   let mode = "text";
@@ -309,6 +309,18 @@ export function openCard(root, id) {
 
   pageEl.style.setProperty("--page-h", PAGE_CONTENT_H + "px");
 
+  function trimLeadingBlanks() {
+    if (!canEdit || editor.isDestroyed) return;
+    const doc = editor.state.doc;
+    let end = 0, lead = 0, hasContent = false;
+    doc.forEach((n, off) => {
+      if (hasContent) return;
+      if (n.type.name === "paragraph" && n.content.size === 0) { lead++; end = off + n.nodeSize; } else hasContent = true;
+    });
+    if (lead && hasContent) editor.view.dispatch(editor.state.tr.delete(0, end));
+  }
+  const trimTimer = setTimeout(trimLeadingBlanks, 2200);
+
   return {
     destroy() {
       document.removeEventListener("keydown", onKey);
@@ -317,6 +329,7 @@ export function openCard(root, id) {
       entry.provider.awareness.off("change", renderPresence);
       offStatus();
       clearTimeout(titleTimer);
+      clearTimeout(trimTimer);
       closeMathPopover();
       selMenu.destroy();
       aiPanel.destroy();
