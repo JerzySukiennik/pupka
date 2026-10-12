@@ -15,6 +15,21 @@
 </head>
 <body>
 <div id="app"></div>
-<script type="module" src="src/main.js"></script>
+<script type="module">
+const FILES = ["src/main.js", "src/store.js", "src/home.js", "src/card.js", "src/net.js", "src/md.js", "src/ui.js", "src/icons.js", "src/extensions.js", "src/draw.js", "src/ai.js", "lib/vendor.js", "styles.css"];
+import("./src/main.js").catch(async (e) => {
+  console.error(e);
+  const app = document.getElementById("app");
+  if (sessionStorage.getItem("pupka-boot-retry")) {
+    app.innerHTML = '<div style="padding:60px;text-align:center;color:#9a9aa3;font:14px Inter,system-ui">Pupka nie wstała. Odśwież stronę (Cmd+Shift+R). Jeśli dalej nic, napisz Jurkowi.</div>';
+    return;
+  }
+  sessionStorage.setItem("pupka-boot-retry", "1");
+  app.innerHTML = '<div style="padding:60px;text-align:center;color:#9a9aa3;font:14px Inter,system-ui">Odświeżam nową wersję…</div>';
+  await Promise.all(FILES.map((f) => fetch(f, { cache: "reload" }).catch(() => null)));
+  location.reload();
+});
+window.addEventListener("load", () => { setTimeout(() => { if (document.querySelector(".picker, .topbar")) sessionStorage.removeItem("pupka-boot-retry"); }, 3000); });
+</script>
 </body>
 </html>
