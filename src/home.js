@@ -39,19 +39,19 @@ export function renderPicker(root, onPicked) {
     let avatar = null;
     box.innerHTML = `<div class="wordmark">Cześć, ${name}</div><div class="picker-sub">Pierwszy raz: kolor i zdjęcie. Potem już tylko klikasz.</div>
       <div class="setup">
-        <label class="avatar-pick" style="--c:${color}">${avatarHtml({ name, color }, 112)}<input type="file" accept="image/*,.gif" hidden><span>zdjęcie profilowe, może być gif</span></label>
+        <div class="avatar-pick" style="--c:${color}">${avatarHtml({ name, color }, 112)}<input type="file" accept="image/*,.gif" hidden><button type="button" class="btn upload-btn">${icon("image", 16)}<span>Wgraj zdjęcie lub gif</span></button></div>
         <div class="swatches big">${PALETTE.map((c) => `<button data-color="${c}" style="--c:${c}" class="${c === color ? "on" : ""}" title="Kolor"></button>`).join("")}</div>
         <input class="fullname" placeholder="Imię i nazwisko do kartkówek" value="${esc((users.get(name) || {}).fullName || "")}">
         <button class="btn primary done">Gotowe</button>
       </div>`;
     const pick = box.querySelector(".avatar-pick");
     const file = pick.querySelector("input");
-    pick.addEventListener("click", () => file.click());
+    pick.addEventListener("click", (e) => { if (e.target.closest(".avatar, .upload-btn")) file.click(); });
     file.addEventListener("change", async () => {
       const f = file.files[0];
       if (!f) return;
       pick.classList.add("busy");
-      try { avatar = await uploadImage(f, name, 320); pick.querySelector(".avatar").innerHTML = `<img src="${avatar}" alt="">`; } catch (e) { alert(e.message); }
+      const label = pick.querySelector(".upload-btn span"); label.textContent = "Wgrywam…"; try { avatar = await uploadImage(f, name, 320); pick.querySelector(".avatar").innerHTML = `<img src="${avatar}" alt="">`; label.textContent = "Zmień zdjęcie lub gif"; } catch (e) { label.textContent = "Wgraj zdjęcie lub gif"; alert("Nie udało się wgrać: " + e.message); }
       pick.classList.remove("busy");
     });
     box.querySelector(".swatches").addEventListener("click", (e) => {
@@ -250,7 +250,7 @@ export function renderSettings(root) {
       <label>Godziny lekcji<div class="hours">${hs.map((h, i) => `<input data-hour="${i}" value="${esc(h)}" size="5">`).join("")}</div></label>
     </section>
     <section><div class="eyebrow">Ja: ${esc(name)}</div>
-      <div class="profile-row"><label class="avatar-pick" style="--c:${p.color || "#555"}">${avatarHtml({ name, color: p.color, avatar: p.avatar }, 88)}<input type="file" accept="image/*,.gif" hidden><span>zmień zdjęcie lub gif</span></label>
+      <div class="profile-row"><div class="avatar-pick" style="--c:${p.color || "#555"}">${avatarHtml({ name, color: p.color, avatar: p.avatar }, 88)}<input type="file" accept="image/*,.gif" hidden><button type="button" class="btn upload-btn">${icon("image", 16)}<span>Wgraj zdjęcie lub gif</span></button>${p.avatar ? `<button type="button" class="btn small remove-avatar">Usuń zdjęcie</button>` : ""}</div>
       <div class="profile-fields"><div class="swatches big">${PALETTE.map((c) => `<button data-mycolor="${c}" style="--c:${c}" class="${c === p.color ? "on" : ""}" title="Kolor"></button>`).join("")}</div>
       <label>Imię i nazwisko (na kartkówkach, klasa 8K)<input data-me="fullName" value="${esc(p.fullName || "")}"></label></div></div>
       <label>Podpis odręczny do kartkówek</label>
@@ -270,13 +270,16 @@ export function renderSettings(root) {
     else if (t.dataset.me) { users.set(name, Object.assign({}, myProfile(), { [t.dataset.me]: t.value.trim() })); updatePresence(); }
     else if (t.type === "file") {
       const f = t.files[0]; if (!f) return;
-      try { const url = await uploadImage(f, name, 320); users.set(name, Object.assign({}, myProfile(), { avatar: url })); updatePresence(); main.querySelector(".avatar-pick .avatar").innerHTML = `<img src="${url}" alt="">`; } catch (err) { alert(err.message); }
+      try { const url = await uploadImage(f, name, 320); users.set(name, Object.assign({}, myProfile(), { avatar: url })); updatePresence(); renderSettings(root); } catch (err) { alert("Nie udało się wgrać: " + err.message); }
     }
   });
   main.addEventListener("click", (e) => {
-    const b = e.target.closest("button, .avatar-pick");
+    const av = e.target.closest(".avatar-pick .avatar");
+    if (av) { main.querySelector(".avatar-pick input").click(); return; }
+    const b = e.target.closest("button");
     if (!b) return;
-    if (b.classList.contains("avatar-pick")) { b.querySelector("input").click(); return; }
+    if (b.classList.contains("upload-btn")) { main.querySelector(".avatar-pick input").click(); return; }
+    if (b.classList.contains("remove-avatar")) { users.set(name, Object.assign({}, myProfile(), { avatar: null })); updatePresence(); renderSettings(root); return; }
     if (b.dataset.mycolor) { users.set(name, Object.assign({}, myProfile(), { color: b.dataset.mycolor })); updatePresence(); main.querySelectorAll("[data-mycolor]").forEach((x) => x.classList.toggle("on", x === b)); main.querySelector(".avatar-pick").style.setProperty("--c", b.dataset.mycolor); main.querySelector(".avatar-pick .avatar").style.setProperty("--c", b.dataset.mycolor); }
     else if (b.dataset.go) window.dispatchEvent(new CustomEvent("pupka:switch"));
     else if (b.dataset.sig === "clear") sig.clear();
