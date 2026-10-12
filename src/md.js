@@ -168,6 +168,7 @@ export function blockToMd(node, indent = "") {
     node.forEach((row) => { const cells = []; row.forEach((cell) => cells.push(inlineToMd(cell).replace(/\n/g, " "))); rows.push("| " + cells.join(" | ") + " |"); });
     return rows.join("\n");
   }
+  if (t === "spacer") return `(obszar rysunku, ${node.attrs.h} px)`;
   if (t === "testHeader") return `(nagłówek testu: ${node.attrs.fullName}, ${node.attrs.cls}, ${node.attrs.date}, ${node.attrs.name})`;
   return inlineToMd(node);
 }

@@ -62,6 +62,21 @@ function arrowHead(a, b, w) {
 }
 
 
+function smoothCurve(pts) {
+  if (pts.length < 3) return pts;
+  const o = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const p0 = pts[i - 1] || pts[i], p1 = pts[i], p2 = pts[i + 1], p3 = pts[i + 2] || p2;
+    for (let t = 0; t < 1; t += 0.125) {
+      const t2 = t * t, t3 = t2 * t;
+      const f = (k) => 0.5 * (2 * p1[k] + (-p0[k] + p2[k]) * t + (2 * p0[k] - 5 * p1[k] + 4 * p2[k] - p3[k]) * t2 + (-p0[k] + 3 * p1[k] - 3 * p2[k] + p3[k]) * t3);
+      o.push([Math.round(f(0) * 10) / 10, Math.round(f(1) * 10) / 10]);
+    }
+  }
+  o.push(pts[pts.length - 1]);
+  return o;
+}
+
 export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit, onChange, undoManager }) {
   const strokes = ydoc.getMap("strokes");
   const ownUndo = !undoManager;
@@ -115,13 +130,15 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
       if (s.t === "arrow") g.appendChild(svg("polygon", { points: arrowHead(a, b, w), fill: s.c }));
     } else if (s.t === "rect") {
       const [a, b] = s.p;
-      g.appendChild(svg("rect", { x: Math.min(a[0], b[0]), y: Math.min(a[1], b[1]), width: Math.abs(b[0] - a[0]), height: Math.abs(b[1] - a[1]), fill: "none", stroke: s.c, "stroke-width": w, rx: 2 }));
+      g.appendChild(svg("rect", { x: Math.min(a[0], b[0]), y: Math.min(a[1], b[1]), width: Math.abs(b[0] - a[0]), height: Math.abs(b[1] - a[1]), fill: s.f || "none", stroke: s.c, "stroke-width": w, rx: 2 }));
     } else if (s.t === "ellipse") {
       const [a, b] = s.p;
-      g.appendChild(svg("ellipse", { cx: (a[0] + b[0]) / 2, cy: (a[1] + b[1]) / 2, rx: Math.abs(b[0] - a[0]) / 2, ry: Math.abs(b[1] - a[1]) / 2, fill: "none", stroke: s.c, "stroke-width": w }));
+      g.appendChild(svg("ellipse", { cx: (a[0] + b[0]) / 2, cy: (a[1] + b[1]) / 2, rx: Math.abs(b[0] - a[0]) / 2, ry: Math.abs(b[1] - a[1]) / 2, fill: s.f || "none", stroke: s.c, "stroke-width": w }));
+    } else if (s.t === "poly") {
+      g.appendChild(svg(s.closed ? "polygon" : "polyline", { points: s.p.map((p) => p.join(",")).join(" "), fill: s.f || "none", stroke: s.c, "stroke-width": w, "stroke-linejoin": "round", "stroke-linecap": "round" }));
     } else if (s.t === "label") {
       const [x, y] = s.p[0];
-      const text = svg("text", { x, y, fill: s.c, "font-size": s.w || 16, class: "draw-label" });
+      const text = svg("text", { x, y, fill: s.c, "font-size": s.w || 16, class: "draw-label", stroke: "#ffffff", "stroke-width": 4, "paint-order": "stroke", "stroke-linejoin": "round" });
       String(s.txt || "").split("\n").forEach((line, i) => { const ts = svg("tspan", { x, dy: i ? "1.25em" : 0 }); ts.textContent = line; text.appendChild(ts); });
       g.appendChild(text);
     }
@@ -131,6 +148,7 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     const e = els.get(id);
     if (!e) return;
     e.g.setAttribute("transform", `translate(0,${topOf(e.s)})`);
+    e.g.style.display = e.s.sp && !tops.has(e.s.bid) ? "none" : "";
     e.g.classList.toggle("selected", st.selection.has(id));
   }
   function renderAll() {
@@ -499,6 +517,29 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
       const by = {}, labels = [];
       strokes.forEach((s) => { by[s.by || "?"] = (by[s.by || "?"] || 0) + 1; if (s.t === "label" && s.txt) labels.push(String(s.txt).slice(0, 40)); });
       return `${strokes.size} elementów (${Object.entries(by).map(([k, v]) => `${k}: ${v}`).join(", ")})` + (labels.length ? `; etykiety: ${labels.slice(0, 15).join(" | ")}` : "");
+    },
+    addShapes(bid, shapes, opts = {}) {
+      const clamp = (v, a, b) => Math.max(a, Math.min(b, Number.isFinite(+v) ? +v : a));
+      const hex = (c, d) => /^#[0-9a-fA-F]{6}$/.test(String(c || "")) ? c : d;
+      const maxY = opts.height || 700;
+      const recs = [];
+      for (const sh of Array.isArray(shapes) ? shapes.slice(0, 160) : []) {
+        const pts = (Array.isArray(sh.points) ? sh.points : []).slice(0, 300).filter((p) => Array.isArray(p) && p.length >= 2).map((p) => [Math.round(clamp(p[0], 0, 660) * 10) / 10, Math.round(clamp(p[1], 0, maxY) * 10) / 10]);
+        if (!pts.length) continue;
+        const base = { c: hex(sh.color, "#111111"), w: clamp(sh.width || 2, 1, 8), by: "AI", ts: Date.now(), bid, sp: 1, fy: 0 };
+        const f = sh.fill ? hex(sh.fill, null) : null;
+        const first = pts[0], last = pts[pts.length - 1];
+        const type = String(sh.type || "");
+        if (type === "line" || type === "arrow") { if (pts.length >= 2) recs.push(Object.assign(base, { t: type, p: [first, last] })); }
+        else if (type === "rect" || type === "ellipse") { if (pts.length >= 2) recs.push(Object.assign(base, { t: type, p: [first, last], f })); }
+        else if (type === "curve") { if (pts.length >= 2) recs.push(Object.assign(base, { t: "pen", p: smoothCurve(pts) })); }
+        else if (type === "polygon" || type === "polyline") { if (pts.length >= 2) recs.push(Object.assign(base, { t: "poly", p: pts, closed: type === "polygon", f })); }
+        else if (type === "label") { const txt = String(sh.text || "").slice(0, 90); if (txt) recs.push(Object.assign(base, { t: "label", p: [first], txt, w: clamp(sh.size || 14, 9, 32) })); }
+      }
+      if (!recs.length) return 0;
+      ydoc.transact(() => recs.forEach((r) => strokes.set(uid(), r)), "draw");
+      undo.stopCapturing();
+      return recs.length;
     },
     rerender: schedule,
     destroy() {

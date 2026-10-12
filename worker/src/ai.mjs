@@ -140,7 +140,7 @@ export async function chat(req, env, origin, sse) {
   let usd = 0;
   let edited = false;
   for (let round = 0; round < 6; round++) {
-    const res = await anthropicStream(env, { model: MODEL, max_tokens: 4000, system, messages, tools: TOOLS, output_config: { effort: "medium" } }, sse);
+    const res = await anthropicStream(env, { model: MODEL, max_tokens: 9000, system, messages, tools: TOOLS, output_config: { effort: "medium" } }, sse);
     usd += usdOf(res.usage);
     const tools = res.content.filter((b) => b.type === "tool_use");
     if (!tools.length || res.stop !== "tool_use") break;
@@ -160,6 +160,11 @@ export async function chat(req, env, origin, sse) {
           const items = await searchImages(env, String(t.input.query || "").slice(0, 200), origin);
           sse({ t: "images", items });
           result = items.length ? JSON.stringify(items) : "Nic nie znaleziono. Spróbuj innego zapytania lub powiedz użytkownikowi, że nie znalazłeś.";
+        } else if (t.name === "draw_on_card") {
+          const shapes = Array.isArray(t.input.shapes) ? t.input.shapes.slice(0, 160) : [];
+          sse({ t: "draw", after_block: t.input.after_block || 0, height: t.input.height || 300, shapes });
+          edited = true;
+          result = shapes.length ? `Narysowano ${shapes.length} figur na karcie.` : "Brak figur do narysowania.";
         } else if (t.name === "delete_drawings") {
           sse({ t: "drawings", author: t.input.author ? String(t.input.author).slice(0, 20) : null });
           edited = true;

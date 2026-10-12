@@ -4,7 +4,7 @@ import { Node, Extension, mergeAttributes, InputRule, wrappingInputRule, Plugin,
 import { uid } from "./store.js";
 import { icon } from "./icons.js";
 
-export const BLOCK_TYPES = ["paragraph", "heading", "bulletList", "orderedList", "blockquote", "codeBlock", "horizontalRule", "table", "image", "callout", "testHeader"];
+export const BLOCK_TYPES = ["paragraph", "heading", "bulletList", "orderedList", "blockquote", "codeBlock", "horizontalRule", "table", "image", "callout", "testHeader", "spacer"];
 
 export const BlockId = Extension.create({
   name: "blockId",
@@ -178,6 +178,30 @@ export const Callout = Node.create({
         if (block.content.size !== 0 || $from.index(-1) !== parent.childCount - 1 || parent.childCount < 2) return false;
         return editor.commands.lift("callout");
       }
+    };
+  }
+});
+
+
+export const Spacer = Node.create({
+  name: "spacer",
+  group: "block",
+  atom: true,
+  selectable: true,
+  draggable: false,
+  addAttributes() {
+    return { h: { default: 240, parseHTML: (el) => parseInt(el.getAttribute("data-h"), 10) || 240, renderHTML: (a) => ({ "data-h": a.h }) } };
+  },
+  parseHTML() { return [{ tag: "div[data-spacer]" }]; },
+  renderHTML({ HTMLAttributes }) { return ["div", mergeAttributes(HTMLAttributes, { "data-spacer": "", class: "draw-spacer" })]; },
+  addNodeView() {
+    return ({ node }) => {
+      const dom = document.createElement("div");
+      dom.className = "draw-spacer";
+      dom.contentEditable = "false";
+      const set = (n) => { dom.style.height = n.attrs.h + "px"; if (n.attrs.bid) dom.dataset.bid = n.attrs.bid; };
+      set(node);
+      return { dom, update: (n) => { if (n.type.name !== "spacer") return false; set(n); return true; }, ignoreMutation: () => true, selectNode: () => dom.classList.add("selected"), deselectNode: () => dom.classList.remove("selected") };
     };
   }
 });

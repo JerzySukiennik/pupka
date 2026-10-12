@@ -3,7 +3,7 @@
 import { TextSelection } from "../lib/vendor.js";
 import { aiChat, aiRewrite } from "./net.js";
 import { parseMarkdown, docToBlocks, mdToHtml, esc } from "./md.js";
-import { me, allCards, subject, fmtDate, AI_COLOR, colorOf } from "./store.js";
+import { me, allCards, subject, fmtDate, AI_COLOR, colorOf, uid } from "./store.js";
 import { icon } from "./icons.js";
 
 function cardsIndexText(currentId) {
@@ -44,6 +44,19 @@ export function applyEdits(editor, ops, bids) {
   tr.setMeta("addToHistory", true);
   editor.view.dispatch(tr.scrollIntoView());
   return targets.length;
+}
+
+export function applyDrawing(editor, draw, bids, ev) {
+  const h = Math.max(120, Math.min(700, Math.round(+ev.height || 300)));
+  const doc = editor.state.doc;
+  let at = doc.content.size, atEnd = true;
+  const n = Math.round(+ev.after_block || 0);
+  if (n >= 1 && bids[n - 1]) doc.forEach((node, pos) => { if (node.attrs && node.attrs.bid === bids[n - 1]) { at = pos + node.nodeSize; atEnd = false; } });
+  const bid = uid();
+  const nodes = [editor.schema.nodes.spacer.create({ h, bid })];
+  if (atEnd) nodes.push(editor.schema.nodes.paragraph.create());
+  editor.view.dispatch(editor.state.tr.insert(at, nodes));
+  return draw.addShapes(bid, ev.shapes, { height: h });
 }
 
 export function createAiPanel({ editor, entry, getCard, container, onEdited, draw, undo }) {
@@ -125,6 +138,7 @@ export function createAiPanel({ editor, entry, getCard, container, onEdited, dra
         if (ev.t === "delta") { acc += ev.text; textEl.innerHTML = mdToHtml(acc); msgs.scrollTop = msgs.scrollHeight; }
         else if (ev.t === "status") status.textContent = ev.text;
         else if (ev.t === "images") { images.push(...(ev.items || [])); }
+        else if (ev.t === "draw") { if (!editor.isEditable || !draw) { acc += "\n(Nie mogę rysować na tej karcie.)"; return; } status.textContent = "rysuję"; const n = applyDrawing(editor, draw, bids, ev); if (n) edited = true; else acc += "\n(Rysunek nie wyszedł, spróbuj jeszcze raz.)"; }
         else if (ev.t === "drawings") { if (!editor.isEditable) { acc += "\n(Nie mogę zmieniać rysunków na cudzej kartce.)"; return; } const n = draw ? draw.clearAll(ev.author) : 0; if (n) edited = true; status.textContent = n ? "rysunki usunięte" : "nie było rysunków"; }
         else if (ev.t === "edit") {
           if (!editor.isEditable) { acc += "\n(Nie mogę edytować tej karty: to nie twoja kartkówka.)"; return; }

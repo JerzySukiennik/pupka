@@ -254,6 +254,9 @@ canvas.sig { background: #fff; border-radius: var(--r); width: 100%; max-width: 
 .img-figure.selected .img-handle { display: block; }
 .ProseMirror[contenteditable="false"] .img-handle, .ProseMirror[contenteditable="false"] .img-bar { display: none !important; }
 
+.draw-spacer { margin: .3em 0; border-radius: 6px; }
+.draw-spacer:hover, .draw-spacer.selected { outline: 1px dashed #c3c6ce; }
+
 /* collaboration cursors */
 .collaboration-cursor__caret { position: relative; margin-left: -1px; margin-right: -1px; border-left: 1px solid; border-right: 1px solid; word-break: normal; pointer-events: none; }
 .collaboration-cursor__label { position: absolute; top: -1.45em; left: -1px; font-size: 10px; font-family: var(--ui); font-weight: 600; line-height: normal; user-select: none; color: #fff; padding: 1px 5px; border-radius: 4px 4px 4px 0; white-space: nowrap; pointer-events: none; }
@@ -358,6 +361,7 @@ body.hide-cursors .collaboration-cursor__selection { background: transparent !im
   .workspace { overflow: visible; padding: 0; }
   .page { width: auto; min-height: 0; padding: 0; margin: 0; box-shadow: none; border-radius: 0; background: #fff; }
   .page.grid .editor { background: none; }
+  .draw-spacer { outline: 0 !important; }
   .page-head { display: block !important; position: static; text-align: right; margin-bottom: 6mm; color: #555; }
   .ProseMirror { min-height: 0; }
   .ProseMirror p.is-editor-empty:first-child::before { display: none; }

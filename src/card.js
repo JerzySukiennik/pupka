@@ -1,7 +1,7 @@
 /* Card screen: TipTap editor bound to the card's Yjs doc, toolbar, drawing layer, presence, AI panel, print. */
 
 import { Editor, StarterKit, Collaboration, CollaborationCursor, Underline, Subscript, Superscript, Table, TableRow, TableCell, TableHeader, Placeholder, TextStyle, FontFamily, TextAlign, yUndoPluginKey } from "../lib/vendor.js";
-import { BlockId, MathNode, Callout, TestHeader, ResizableImage, Shortcuts, KINDS, closeMathPopover } from "./extensions.js";
+import { BlockId, MathNode, Callout, TestHeader, Spacer, ResizableImage, Shortcuts, KINDS, closeMathPopover } from "./extensions.js";
 import { createDraw, COLORS, SIZES } from "./draw.js";
 import { createAiPanel, createSelectionMenu } from "./ai.js";
 import { uploadImage } from "./net.js";
@@ -103,7 +103,7 @@ export function openCard(root, id) {
       Table.configure({ resizable: false }), TableRow, TableCell, TableHeader,
       ResizableImage.configure({ inline: false, allowBase64: false }),
       Placeholder.configure({ placeholder: isTest ? "Pisz tutaj…" : "Pisz tutaj. Skróty: - lista, # nagłówek, !w ramka, $x^2$ wzór" }),
-      BlockId, MathNode, Callout, TestHeader, Shortcuts
+      BlockId, MathNode, Callout, TestHeader, Spacer, Shortcuts
     ]
   });
   const pmEl = editorEl.querySelector(".ProseMirror");
@@ -112,6 +112,7 @@ export function openCard(root, id) {
   undoManager.addToScope(entry.doc.getMap("strokes"));
   undoManager.addTrackedOrigin("draw");
   const draw = createDraw({ pageEl, pmEl, ydoc: entry.doc, provider: entry.provider, name, color: prof.color || "#111", canEdit: () => canEdit, onChange: syncDrawUi, undoManager });
+  pageEl.__draw = draw;
   const aiPanel = createAiPanel({ editor, entry, getCard: () => getCard(id) || c, container: view.querySelector(".ai-panel"), onEdited: () => draw.rerender(), draw, undo: () => editor.commands.undo() });
   const selMenu = createSelectionMenu({ editor, aiPanel, isDrawing: () => draw.isActive() });
 
