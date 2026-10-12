@@ -78,7 +78,7 @@ export default {
     }
 
     if (path === "/health") {
-      return json(req, { ok: true, haveKey: !!env.ANTHROPIC_API_KEY, google: !!(env.GOOGLE_CSE_KEY && env.GOOGLE_CSE_CX), spent: +(await spent(env)).toFixed(4), budget: parseFloat(env.DAILY_USD || "2") });
+      return json(req, { ok: true, haveKey: !!env.ANTHROPIC_API_KEY, spent: +(await spent(env)).toFixed(4), budget: parseFloat(env.DAILY_USD || "2") });
     }
 
     if (path === "/ai/chat" || path === "/ai/rewrite") {

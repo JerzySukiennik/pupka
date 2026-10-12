@@ -66,33 +66,33 @@ async function anthropicStream(env, body, onEvent) {
 }
 
 async function searchImages(env, query, origin) {
-  if (!env.GOOGLE_CSE_KEY || !env.GOOGLE_CSE_CX) return wikimediaImages(env, query, origin);
-  const u = new URL("https://www.googleapis.com/customsearch/v1");
-  u.searchParams.set("key", env.GOOGLE_CSE_KEY);
-  u.searchParams.set("cx", env.GOOGLE_CSE_CX);
-  u.searchParams.set("q", query);
-  u.searchParams.set("searchType", "image");
-  u.searchParams.set("num", "6");
-  u.searchParams.set("safe", "active");
-  u.searchParams.set("imgSize", "large");
-  const r = await fetch(u);
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error("Google: " + ((j.error && j.error.message) || r.status));
-  const items = (j.items || []).map((it) => ({ url: it.link, title: it.title, width: it.image && it.image.width, height: it.image && it.image.height, mime: it.mime, page: it.image && it.image.contextLink }));
-  return storeImages(env, items, origin);
-}
-
-async function wikimediaImages(env, query, origin) {
-  const u = new URL("https://commons.wikimedia.org/w/api.php");
-  u.search = new URLSearchParams({ action: "query", generator: "search", gsrsearch: query, gsrnamespace: "6", gsrlimit: "8", prop: "imageinfo", iiprop: "url|size|mime", iiurlwidth: "1200", format: "json", origin: "*" }).toString();
-  const r = await fetch(u, { headers: { "user-agent": "Pupka/1.0 (school notebook)" } });
-  const j = await r.json().catch(() => ({}));
-  const pages = Object.values((j.query && j.query.pages) || {});
-  const items = pages.filter((p) => p.imageinfo && /jpeg|png/.test(p.imageinfo[0].mime)).map((p) => {
-    const ii = p.imageinfo[0];
-    return { url: ii.thumburl || ii.url, title: p.title.replace(/^File:/, ""), width: ii.thumbwidth || ii.width, height: ii.thumbheight || ii.height, mime: ii.mime };
-  }).slice(0, 6);
-  return storeImages(env, items, origin);
+  const items = [];
+  const seen = new Set();
+  const push = (it) => { if (it && it.url && !seen.has(it.url)) { seen.add(it.url); items.push(it); } };
+  for (const lang of ["pl", "en"]) {
+    try {
+      const u = new URL(`https://${lang}.wikipedia.org/w/api.php`);
+      u.search = new URLSearchParams({ action: "query", generator: "search", gsrsearch: query, gsrlimit: "4", prop: "pageimages|info", piprop: "thumbnail|name", pithumbsize: "1400", inprop: "url", format: "json", origin: "*" }).toString();
+      const r = await fetch(u, { headers: { "user-agent": "Pupka/1.0 (school notebook; gzowotesla@gmail.com)" }, signal: AbortSignal.timeout(6000) });
+      const j = await r.json().catch(() => ({}));
+      const pages = Object.values((j.query && j.query.pages) || {}).sort((a, b) => (a.index || 0) - (b.index || 0));
+      for (const pg of pages) if (pg.thumbnail && !/\.svg$/i.test(pg.pageimage || "")) push({ url: pg.thumbnail.source, title: pg.title, width: pg.thumbnail.width, height: pg.thumbnail.height, page: pg.fullurl });
+    } catch (e) { /* next source */ }
+    if (items.length >= 3) break;
+  }
+  if (items.length < 4) {
+    try {
+      const u = new URL("https://commons.wikimedia.org/w/api.php");
+      u.search = new URLSearchParams({ action: "query", generator: "search", gsrsearch: query + " filetype:bitmap", gsrnamespace: "6", gsrlimit: "8", prop: "imageinfo", iiprop: "url|size|mime", iiurlwidth: "1400", format: "json", origin: "*" }).toString();
+      const r = await fetch(u, { headers: { "user-agent": "Pupka/1.0 (school notebook; gzowotesla@gmail.com)" }, signal: AbortSignal.timeout(6000) });
+      const j = await r.json().catch(() => ({}));
+      for (const p of Object.values((j.query && j.query.pages) || {})) {
+        const ii = p.imageinfo && p.imageinfo[0];
+        if (ii && /jpeg|png/.test(ii.mime)) push({ url: ii.thumburl || ii.url, title: p.title.replace(/^File:/, ""), width: ii.thumbwidth || ii.width, height: ii.thumbheight || ii.height, page: ii.descriptionurl });
+      }
+    } catch (e) { /* no commons */ }
+  }
+  return storeImages(env, items.slice(0, 6), origin);
 }
 
 async function storeImages(env, items, origin) {

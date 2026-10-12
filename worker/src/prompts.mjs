@@ -32,8 +32,8 @@ export const TOOLS = [
   },
   {
     name: "search_images",
-    description: "Szuka obrazków w internecie do tematu i zapisuje je w apce. Zwraca listę {url, title, width, height}. Wybierz najlepszy i wstaw przez edit_card jako ![podpis](url).",
-    input_schema: { type: "object", properties: { query: { type: "string", description: "krótkie zapytanie, np. 'DNA double helix diagram' albo 'Mieszko I'" } }, required: ["query"] }
+    description: "Szuka obrazków do tematu w Wikipedii (pl, en) i Wikimedia Commons i zapisuje je w apce. Zwraca listę {url, title, width, height, page}. Wybierz najlepszy i wstaw przez edit_card jako ![podpis](url). Najlepiej działa nazwa hasła encyklopedycznego, np. 'Mieszko I', 'mitochondrium', 'DNA'.",
+    input_schema: { type: "object", properties: { query: { type: "string", description: "hasło jak w encyklopedii, po polsku albo angielsku" } }, required: ["query"] }
   },
   {
     name: "edit_card",
