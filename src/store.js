@@ -3,6 +3,8 @@
 import { Y, WebsocketProvider, IndexeddbPersistence } from "../lib/vendor.js";
 import { WS } from "./net.js";
 
+export const EPOCH = 2;
+export const INDEX_ROOM = EPOCH > 1 ? `index-e${EPOCH}` : "index";
 export const NAMES = ["Jurek", "Janek", "Jaś"];
 export const CLASS = "8K";
 export const PALETTE = ["#2f7cf6", "#1fa463", "#f28c28", "#a855f7", "#0fb5c9", "#e0457b", "#8d6e3f", "#111111"];
@@ -34,10 +36,26 @@ export function fmtDateLong(iso) {
   return `${d} ${months[m - 1]} ${y}`;
 }
 
+export async function resetLocalIfNeeded() {
+  let have = null;
+  try { have = localStorage.getItem("pupka-epoch"); } catch (e) { /* storage blocked */ }
+  if (have === String(EPOCH)) return false;
+  try {
+    const dbs = indexedDB.databases ? await indexedDB.databases() : [];
+    await Promise.all(dbs.filter((d) => d.name && d.name.startsWith("pupka-")).map((d) => new Promise((res) => { const r = indexedDB.deleteDatabase(d.name); r.onsuccess = r.onerror = r.onblocked = () => res(); setTimeout(res, 1500); })));
+  } catch (e) { /* best effort */ }
+  try {
+    Object.keys(localStorage).filter((k) => k.startsWith("pupka-")).forEach((k) => localStorage.removeItem(k));
+    sessionStorage.clear();
+    localStorage.setItem("pupka-epoch", String(EPOCH));
+  } catch (e) { /* storage blocked */ }
+  return true;
+}
+
 export function connectIndex() {
   if (state.indexProvider) return state.indexProvider;
-  const idb = new IndexeddbPersistence("pupka-index", index);
-  const p = new WebsocketProvider(WS, "index", index, { maxBackoffTime: 8000 });
+  const idb = new IndexeddbPersistence("pupka-index-e" + EPOCH, index);
+  const p = new WebsocketProvider(WS, INDEX_ROOM, index, { maxBackoffTime: 8000 });
   state.ready = Promise.race([
     idb.whenSynced.then(() => (index.getMap("subjects").size ? null : new Promise((res) => { p.once("sync", res); setTimeout(res, 2500); }))),
     new Promise((res) => setTimeout(res, 4000))

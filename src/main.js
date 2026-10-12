@@ -1,10 +1,11 @@
 /* Boot: connect the index, pick a person, route by hash, re-render on shared changes. */
 
-import { connectIndex, onChange, me, setMe, purgeOld, NAMES, card, state, warmCard } from "./store.js";
+import { connectIndex, resetLocalIfNeeded, onChange, me, setMe, purgeOld, NAMES, card, state, warmCard } from "./store.js";
 import { renderPicker, renderHome, renderSubject, renderPlan, renderTrash, renderSettings, openSearch } from "./home.js";
 import { openCard } from "./card.js";
 
 const root = document.getElementById("app");
+await resetLocalIfNeeded();
 const provider = connectIndex();
 let current = null;
 let currentKey = "";
