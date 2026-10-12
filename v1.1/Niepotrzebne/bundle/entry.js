@@ -1,0 +1,27 @@
+/* Vendor bundle entry: everything the app imports from npm, built once with esbuild into lib/vendor.js */
+export * as Y from "yjs";
+export { WebsocketProvider } from "y-websocket";
+export { IndexeddbPersistence } from "y-indexeddb";
+export { Editor, Extension, Node, Mark, mergeAttributes, InputRule, nodeInputRule, markInputRule, textblockTypeInputRule, wrappingInputRule, getMarkRange } from "@tiptap/core";
+export { default as StarterKit } from "@tiptap/starter-kit";
+export { default as Collaboration } from "@tiptap/extension-collaboration";
+export { default as CollaborationCursor } from "@tiptap/extension-collaboration-cursor";
+export { default as Underline } from "@tiptap/extension-underline";
+export { default as Subscript } from "@tiptap/extension-subscript";
+export { default as Superscript } from "@tiptap/extension-superscript";
+export { default as Table } from "@tiptap/extension-table";
+export { default as TableRow } from "@tiptap/extension-table-row";
+export { default as TableCell } from "@tiptap/extension-table-cell";
+export { default as TableHeader } from "@tiptap/extension-table-header";
+export { default as Image } from "@tiptap/extension-image";
+export { default as Placeholder } from "@tiptap/extension-placeholder";
+export { default as TextStyle } from "@tiptap/extension-text-style";
+export { default as FontFamily } from "@tiptap/extension-font-family";
+export { default as Highlight } from "@tiptap/extension-highlight";
+export { default as TextAlign } from "@tiptap/extension-text-align";
+export { ySyncPluginKey, yUndoPluginKey } from "y-prosemirror";
+export { Plugin, PluginKey, TextSelection, NodeSelection } from "@tiptap/pm/state";
+export { Fragment, Slice, DOMParser as PMDOMParser } from "@tiptap/pm/model";
+export { getStroke } from "perfect-freehand";
+export { default as katex } from "katex";
+export { ArrowLeft, Search, CalendarDays, Trash2, SlidersHorizontal, Undo2, Redo2, List, ListOrdered, Quote, Table as TableIcon, Image as ImageIcon, Sigma, Frame, Signature, Pencil, Highlighter, Eraser, Lasso, Slash, MoveUpRight, Square, Circle, Type, Grip, Eye, EyeOff, SeparatorHorizontal, Printer, Sparkles, SendHorizontal, X, Plus, Ellipsis, ChevronDown, RotateCcw, Check, WifiOff, PenLine } from "lucide";

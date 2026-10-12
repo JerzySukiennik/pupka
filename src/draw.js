@@ -61,47 +61,6 @@ function arrowHead(a, b, w) {
   return `${b[0]},${b[1]} ${p1[0]},${p1[1]} ${p2[0]},${p2[1]}`;
 }
 
-function recognize(pts) {
-  if (pts.length < 8) return null;
-  const len = pathLength(pts);
-  if (len < 40) return null;
-  const first = pts[0], last = pts[pts.length - 1];
-  const chord = dist(first, last);
-  let maxDev = 0;
-  for (const p of pts) maxDev = Math.max(maxDev, segDist(p, first, last));
-  if (chord > 0.85 * len && maxDev < Math.max(5, 0.06 * len)) {
-    let a = first, b = last;
-    const ang = Math.atan2(b[1] - a[1], b[0] - a[0]);
-    const deg = (ang * 180) / Math.PI;
-    if (Math.abs(deg) < 7 || Math.abs(Math.abs(deg) - 180) < 7) b = [b[0], a[1]];
-    else if (Math.abs(Math.abs(deg) - 90) < 7) b = [a[0], b[1]];
-    return { t: "line", p: [a, b] };
-  }
-  if (chord < Math.max(24, 0.2 * len)) {
-    const bb = bbox(pts);
-    const cx = (bb.x0 + bb.x1) / 2, cy = (bb.y0 + bb.y1) / 2;
-    const rx = (bb.x1 - bb.x0) / 2, ry = (bb.y1 - bb.y0) / 2;
-    if (rx < 8 || ry < 8) return null;
-    let err = 0;
-    for (const [x, y] of pts) { const v = Math.hypot((x - cx) / rx, (y - cy) / ry); err += Math.abs(v - 1); }
-    err /= pts.length;
-    const simp = rdp(pts, Math.max(6, 0.05 * len));
-    const verts = simp.length > 1 && dist(simp[0], simp[simp.length - 1]) < 0.2 * len ? simp.slice(0, -1) : simp;
-    if (verts.length >= 4 && verts.length <= 6) {
-      let right = 0;
-      for (let i = 0; i < verts.length; i++) {
-        const a = verts[(i + verts.length - 1) % verts.length], b = verts[i], c = verts[(i + 1) % verts.length];
-        const v1 = [a[0] - b[0], a[1] - b[1]], v2 = [c[0] - b[0], c[1] - b[1]];
-        const cos = (v1[0] * v2[0] + v1[1] * v2[1]) / (Math.hypot(...v1) * Math.hypot(...v2) || 1);
-        if (Math.abs(cos) < 0.42) right++;
-      }
-      if (right >= 4 && err > 0.16) return { t: "rect", p: [[bb.x0, bb.y0], [bb.x1, bb.y1]] };
-    }
-    if (err < 0.2) return { t: "ellipse", p: [[bb.x0, bb.y0], [bb.x1, bb.y1]] };
-    if (verts.length >= 4 && verts.length <= 5) return { t: "rect", p: [[bb.x0, bb.y0], [bb.x1, bb.y1]] };
-  }
-  return null;
-}
 
 export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit, onChange }) {
   const strokes = ydoc.getMap("strokes");
@@ -117,7 +76,6 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
 
   const st = {
     active: false, tool: "pen", color: color || "#111", size: 4,
-    straighten: localStorage.getItem("pupka-straighten") !== "0",
     grid: localStorage.getItem("pupka-grid") === "1",
     selection: new Set(), clipboard: null, drawing: null, spaceDown: false
   };
@@ -127,10 +85,11 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
   let raf = 0;
 
   function layout() {
-    layer.style.left = pmEl.offsetLeft + "px";
-    layer.style.top = pmEl.offsetTop + "px";
-    layer.style.width = pmEl.offsetWidth + "px";
-    layer.style.height = pmEl.offsetHeight + "px";
+    const pr = pageEl.getBoundingClientRect(), r = pmEl.getBoundingClientRect();
+    layer.style.left = (r.left - pr.left - pageEl.clientLeft) + "px";
+    layer.style.top = (r.top - pr.top - pageEl.clientTop) + "px";
+    layer.style.width = r.width + "px";
+    layer.style.height = r.height + "px";
     tops = new Map();
     for (const el of pmEl.children) if (el.dataset && el.dataset.bid) tops.set(el.dataset.bid, el.offsetTop);
   }
@@ -181,7 +140,12 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     });
     drawSelection();
   }
-  function schedule() { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; layout(); renderAll(); }); }
+  function schedule() {
+    if (raf) return;
+    const run = () => { if (!raf) return; raf = 0; layout(); renderAll(); };
+    raf = requestAnimationFrame(run);
+    setTimeout(() => { if (raf) { cancelAnimationFrame(raf); run(); } }, 120);
+  }
   strokes.observe(() => schedule());
   const ro = new ResizeObserver(() => schedule());
   ro.observe(pmEl);
@@ -387,7 +351,7 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     if (e.button !== 0 || st.spaceDown) return;
     if (labelInput) { closeLabel(true); return; }
     const p = toLocal(e);
-    capture.setPointerCapture(e.pointerId);
+    try { capture.setPointerCapture(e.pointerId); } catch (err) { /* synthetic pointer */ }
     e.preventDefault();
     const tool = st.tool;
     if (tool === "label") {
@@ -417,7 +381,8 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
   function move(e) {
     const d = st.drawing;
     if (!d) return;
-    const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    let evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+    if (!evs || !evs.length) evs = [e];
     if (d.tool === "eraser") { for (const ev of evs) eraseAt(toLocal(ev)); return; }
     if (d.tool === "move") {
       const p = toLocal(e);
@@ -467,9 +432,7 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     }
     if (d.tool === "pen" || d.tool === "hl") {
       if (d.pts.length === 1) d.pts.push([d.pts[0][0] + 0.5, d.pts[0][1] + 0.5]);
-      let rec = { t: d.tool, c: d.c, w: d.w, p: d.pts };
-      if (d.tool === "pen" && st.straighten) { const r = recognize(d.pts); if (r) rec = { t: r.t, c: d.c, w: d.w, p: r.p }; }
-      commit(rec);
+      commit({ t: d.tool, c: d.c, w: d.w, p: d.pts });
       return;
     }
     const end = d.pts[d.pts.length - 1];
@@ -514,8 +477,7 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     setSize(w) { st.size = w; onChange && onChange(api.getState()); },
     setSpace(v) { st.spaceDown = v; capture.style.pointerEvents = st.active && !v ? "auto" : "none"; },
     toggleGrid() { st.grid = !st.grid; localStorage.setItem("pupka-grid", st.grid ? "1" : "0"); pageEl.classList.toggle("grid", st.grid); onChange && onChange(api.getState()); },
-    toggleStraighten() { st.straighten = !st.straighten; localStorage.setItem("pupka-straighten", st.straighten ? "1" : "0"); onChange && onChange(api.getState()); },
-    getState() { return { active: st.active, tool: st.tool, color: st.color, size: st.size, grid: st.grid, straighten: st.straighten, selection: st.selection.size }; },
+    getState() { return { active: st.active, tool: st.tool, color: st.color, size: st.size, grid: st.grid, selection: st.selection.size }; },
     undo() { undo.undo(); },
     redo() { undo.redo(); },
     canUndo() { return undo.canUndo(); },

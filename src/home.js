@@ -3,21 +3,25 @@
 import { NAMES, PALETTE, FONTS, DAYS, DEFAULT_HOURS, users, settings, plan, listSubjects, listCards, allCards, subject, card, createSubject, updateSubject, reorderSubjects, createLesson, createTest, updateCard, trashCard, trashSubject, restoreCard, restoreSubject, trashItems, presence, setMe, me, myProfile, nowLesson, hours, today, fmtDate, fmtDateLong, updatePresence, state, onChange } from "./store.js";
 import { uploadImage, dataUrlToBlob } from "./net.js";
 import { topbar, avatarHtml, presenceHtml } from "./ui.js";
+import { icon } from "./icons.js";
 import { esc } from "./md.js";
 
+const WEEKDAYS = ["niedziela", "poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota"];
 function go(hash) { location.hash = hash; }
+function plural(n, a, b, c) { if (n === 1) return a; const m = n % 10, h = n % 100; return m >= 2 && m <= 4 && !(h >= 12 && h <= 14) ? b : c; }
 
 export function renderPicker(root, onPicked) {
   const el = document.createElement("div");
   el.className = "picker";
   const draw = () => {
-    el.innerHTML = `<div class="picker-box"><div class="picker-logo">Pupka</div><div class="picker-sub">Kto pisze?</div><div class="picker-tiles">${NAMES.map((n) => {
+    el.innerHTML = `<div class="picker-box"><div class="wordmark">Pupka</div><div class="picker-sub">Kto pisze?</div><div class="picker-tiles">${NAMES.map((n) => {
       const p = users.get(n) || {};
-      return `<button class="tile" data-name="${n}" style="--c:${p.color || "#555"}">${avatarHtml({ name: n, color: p.color, avatar: p.avatar }, 84)}<span class="tile-name">${n}</span></button>`;
-    }).join("")}</div><div class="picker-net">${state.online ? "połączono" : "łączę… (offline też działa)"}</div><img class="watermark picker-wm" src="assets/gzowo-labs-fire.gif" alt="Gzowo Labs"></div>`;
+      const c = p.color || PALETTE[NAMES.indexOf(n)];
+      return `<button class="tile ${p.color ? "" : "fresh"}" data-name="${n}" style="--c:${c}">${avatarHtml({ name: n, color: c, avatar: p.avatar }, 96)}<span class="tile-name">${n}</span>${p.color ? "" : `<span class="tile-hint">pierwszy raz: ustaw kolor i zdjęcie</span>`}</button>`;
+    }).join("")}</div><div class="picker-net">${state.online ? "połączono" : "łączę, offline też działa"}</div><img class="watermark picker-wm" src="assets/gzowo-labs-fire.gif" alt="Gzowo Labs"></div>`;
   };
   draw();
-  const obs = () => { if (!el.querySelector(".setup")) draw(); else { const n = el.querySelector(".picker-net"); if (n) n.textContent = state.online ? "połączono" : "łączę… (offline też działa)"; } };
+  const obs = () => { if (!el.querySelector(".setup")) draw(); else { const n = el.querySelector(".picker-net"); if (n) n.textContent = state.online ? "połączono" : "łączę, offline też działa"; } };
   users.observe(obs);
   const offStatus = onChange((k) => { if (k === "status") obs(); });
   el.addEventListener("click", (e) => {
@@ -33,12 +37,12 @@ export function renderPicker(root, onPicked) {
     const box = el.querySelector(".picker-box");
     let color = PALETTE[NAMES.indexOf(name)] || PALETTE[0];
     let avatar = null;
-    box.innerHTML = `<div class="picker-logo">Cześć, ${name}</div><div class="picker-sub">Pierwszy raz: ustaw kolor i zdjęcie. Potem już tylko klikasz.</div>
+    box.innerHTML = `<div class="wordmark">Cześć, ${name}</div><div class="picker-sub">Pierwszy raz: kolor i zdjęcie. Potem już tylko klikasz.</div>
       <div class="setup">
-        <label class="avatar-pick" style="--c:${color}">${avatarHtml({ name, color }, 96)}<input type="file" accept="image/*,.gif" hidden><span>zdjęcie profilowe (może być gif)</span></label>
-        <div class="swatches big">${PALETTE.map((c) => `<button data-color="${c}" style="--c:${c}" class="${c === color ? "on" : ""}"></button>`).join("")}</div>
-        <input class="fullname" placeholder="Imię i nazwisko (do kartkówek)" value="${esc((users.get(name) || {}).fullName || "")}">
-        <button class="primary done">Gotowe</button>
+        <label class="avatar-pick" style="--c:${color}">${avatarHtml({ name, color }, 112)}<input type="file" accept="image/*,.gif" hidden><span>zdjęcie profilowe, może być gif</span></label>
+        <div class="swatches big">${PALETTE.map((c) => `<button data-color="${c}" style="--c:${c}" class="${c === color ? "on" : ""}" title="Kolor"></button>`).join("")}</div>
+        <input class="fullname" placeholder="Imię i nazwisko do kartkówek" value="${esc((users.get(name) || {}).fullName || "")}">
+        <button class="btn primary done">Gotowe</button>
       </div>`;
     const pick = box.querySelector(".avatar-pick");
     const file = pick.querySelector("input");
@@ -70,7 +74,7 @@ export function renderPicker(root, onPicked) {
 function homeRight() {
   const p = myProfile();
   const online = presence().map((s) => s.user);
-  return `${presenceHtml(online, 26)}<span class="net ${state.online ? "on" : ""}"></span><button class="icon-btn" data-go="#/search" title="Szukaj (Cmd+K)">⌕</button><button class="icon-btn" data-go="#/plan" title="Plan lekcji">▦</button><button class="icon-btn" data-go="#/trash" title="Kosz">🗑</button><button class="icon-btn" data-go="#/settings" title="Ustawienia">⚙</button><button class="me-btn" data-go="#/switch" title="Zmień osobę">${avatarHtml({ name: me(), color: p.color, avatar: p.avatar }, 28)}</button>`;
+  return `${presenceHtml(online, 24)}<span class="net ${state.online ? "on" : ""}" title="${state.online ? "połączono" : "offline"}"></span><button class="icon-btn" data-go="#/search" title="Szukaj (Cmd+K)">${icon("search")}</button><button class="icon-btn" data-go="#/plan" title="Plan lekcji">${icon("calendar")}</button><button class="icon-btn" data-go="#/trash" title="Kosz">${icon("trash")}</button><button class="icon-btn" data-go="#/settings" title="Ustawienia">${icon("settings")}</button><button class="me-btn" data-go="#/switch" title="Zmień osobę">${avatarHtml({ name: me(), color: p.color, avatar: p.avatar }, 28)}</button>`;
 }
 
 function whoOn(cardId) { return presence().filter((s) => s.card === cardId).map((s) => s.user); }
@@ -80,17 +84,20 @@ export function renderHome(root) {
   const now = nowLesson();
   const subs = listSubjects();
   const todayCard = now && now.subject ? listCards(now.subject.id, "lesson").find((c) => c.date === today()) : null;
-  root.innerHTML = `${topbar({ title: `<span class="date-now">${esc(fmtDateLong(today()))}</span>`, right: homeRight() })}
+  const d = new Date();
+  root.innerHTML = `${topbar({ title: "", right: homeRight() })}
   <main class="home">
-    ${now && now.subject ? `<section class="now"><div><span class="now-label">Teraz · ${esc(now.time)}</span><h2>${esc(now.subject.emoji || "")} ${esc(now.subject.name)}</h2></div><div class="now-actions">${todayCard ? `<button class="primary" data-open="${todayCard.id}">Otwórz dzisiejszą lekcję</button>` : ""}<button class="${todayCard ? "" : "primary"}" data-new-lesson="${now.subject.id}">Nowa lekcja</button></div></section>` : (plan.size ? "" : `<section class="now hint"><div><span class="now-label">Plan lekcji</span><h2>Wpisz plan, a Pupka sama otworzy właściwy przedmiot</h2></div><div class="now-actions"><button data-go="#/plan">Uzupełnij plan</button></div></section>`)}
-    <div class="subjects">
+    <header class="home-head"><h1>${esc(WEEKDAYS[d.getDay()])}</h1><div class="home-date">${esc(fmtDateLong(today()))}</div></header>
+    ${now && now.subject ? `<section class="now"><div class="now-text"><span class="eyebrow">Teraz · ${esc(now.time)}</span><h2>${esc(now.subject.emoji || "")} ${esc(now.subject.name)}</h2></div><div class="now-actions">${todayCard ? `<button class="btn primary" data-open="${todayCard.id}">Otwórz dzisiejszą lekcję</button><button class="btn" data-new-lesson="${now.subject.id}">Nowa lekcja</button>` : `<button class="btn primary" data-new-lesson="${now.subject.id}">Nowa lekcja</button>`}</div></section>` : (plan.size ? "" : `<section class="now quiet"><div class="now-text"><span class="eyebrow">Plan lekcji</span><h2>Wpisz plan, a Pupka sama otworzy właściwy przedmiot</h2></div><div class="now-actions"><button class="btn" data-go="#/plan">Uzupełnij plan</button></div></section>`)}
+    <div class="eyebrow list-eyebrow">Przedmioty</div>
+    <div class="rows">
       ${subs.map((s) => {
         const lessons = listCards(s.id, "lesson");
         const tests = listCards(s.id, "test");
         const last = lessons[0];
-        return `<a class="subject-tile" href="#/s/${s.id}"><div class="st-top"><span class="st-emoji">${esc(s.emoji || "")}</span><span class="st-name">${esc(s.name)}</span><button class="icon-btn st-menu" data-subject-menu="${s.id}" title="Opcje">…</button></div><div class="st-meta">${lessons.length} ${plural(lessons.length, "lekcja", "lekcje", "lekcji")}${tests.length ? ` · ${Math.round(tests.length / 3)} na ocenę` : ""}</div><div class="st-last">${last ? `${esc(fmtDate(last.date))} · ${esc(last.title || "bez tematu")}` : "jeszcze pusto"}</div><div class="st-presence">${presenceHtml(whoOnSubject(s.id), 22)}</div></a>`;
+        return `<a class="row subject-row" href="#/s/${s.id}"><span class="row-emoji">${esc(s.emoji || "")}</span><span class="row-main"><span class="row-title">${esc(s.name)}</span><span class="row-sub">${lessons.length ? `${lessons.length} ${plural(lessons.length, "lekcja", "lekcje", "lekcji")}${tests.length ? ` · ${Math.round(tests.length / 3)} na ocenę` : ""} · ${esc(fmtDate(last.date))} ${esc(last.title || "bez tematu")}` : "jeszcze pusto"}</span></span><span class="row-presence">${presenceHtml(whoOnSubject(s.id), 22)}</span><button class="icon-btn row-more" data-subject-menu="${s.id}" title="Opcje">${icon("more")}</button></a>`;
       }).join("")}
-      <button class="subject-tile new" data-new-subject><span class="st-plus">+</span><span>Nowy przedmiot</span></button>
+      <button class="row ghost" data-new-subject>${icon("plus")}<span>Nowy przedmiot</span></button>
     </div>
     <img class="watermark home-wm" src="assets/gzowo-labs-fire.gif" alt="Gzowo Labs">
   </main>`;
@@ -107,8 +114,6 @@ export function renderHome(root) {
   bindTopbar(root);
 }
 
-function plural(n, a, b, c) { if (n === 1) return a; const m = n % 10, h = n % 100; return m >= 2 && m <= 4 && !(h >= 12 && h <= 14) ? b : c; }
-
 export function bindTopbar(root) {
   root.querySelector(".topbar")?.addEventListener("click", (e) => {
     const b = e.target.closest("[data-go]");
@@ -120,22 +125,33 @@ export function bindTopbar(root) {
   });
 }
 
+function dialog({ title, fields, ok, onOk }) {
+  const box = document.createElement("div");
+  box.className = "modal-bg";
+  box.innerHTML = `<div class="modal"><h3>${esc(title)}</h3>${fields.map((f) => `<label>${esc(f.label)}${f.type === "select" ? `<select name="${f.name}">${f.options.map((o) => `<option value="${esc(o[0])}">${esc(o[1])}</option>`).join("")}</select>` : `<input name="${f.name}" placeholder="${esc(f.placeholder || "")}" value="${esc(f.value || "")}">`}</label>`).join("")}<div class="modal-actions"><button class="btn cancel">Anuluj</button><button class="btn primary ok">${esc(ok)}</button></div></div>`;
+  document.body.appendChild(box);
+  const first = box.querySelector("input");
+  setTimeout(() => first && first.focus(), 30);
+  const close = () => box.remove();
+  const submit = () => { const v = {}; box.querySelectorAll("input, select").forEach((i) => { v[i.name] = i.value.trim(); }); if (onOk(v) !== false) close(); };
+  box.querySelector(".cancel").addEventListener("click", close);
+  box.querySelector(".ok").addEventListener("click", submit);
+  box.addEventListener("mousedown", (e) => { if (e.target === box) close(); });
+  box.addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.tagName !== "SELECT") submit(); if (e.key === "Escape") close(); });
+}
+
 function newSubjectDialog() {
-  const name = prompt("Nazwa przedmiotu:");
-  if (!name || !name.trim()) return;
-  const emoji = prompt("Emoji (opcjonalnie):", "") || "";
-  go("#/s/" + createSubject(name.trim(), emoji.trim()));
+  dialog({ title: "Nowy przedmiot", fields: [{ name: "name", label: "Nazwa", placeholder: "np. Biologia" }, { name: "emoji", label: "Emoji (opcjonalnie)", placeholder: "🧬" }], ok: "Dodaj", onOk: (v) => { if (!v.name) return false; go("#/s/" + createSubject(v.name, v.emoji)); } });
 }
 
 function subjectMenu(anchor, sid) {
   const s = subject(sid);
   if (!s) return;
   popMenu(anchor, [
-    ["Zmień nazwę", () => { const n = prompt("Nazwa:", s.name); if (n && n.trim()) updateSubject(sid, { name: n.trim() }); }],
-    ["Zmień emoji", () => { const e = prompt("Emoji:", s.emoji || ""); if (e != null) updateSubject(sid, { emoji: e.trim() }); }],
+    ["Zmień nazwę", () => dialog({ title: "Nazwa przedmiotu", fields: [{ name: "name", label: "Nazwa", value: s.name }, { name: "emoji", label: "Emoji", value: s.emoji || "" }], ok: "Zapisz", onOk: (v) => { if (!v.name) return false; updateSubject(sid, { name: v.name, emoji: v.emoji }); } })],
     ["Przesuń wyżej", () => { const ids = listSubjects().map((x) => x.id); const i = ids.indexOf(sid); if (i > 0) { ids.splice(i, 1); ids.splice(i - 1, 0, sid); reorderSubjects(ids); } }],
     ["Przesuń niżej", () => { const ids = listSubjects().map((x) => x.id); const i = ids.indexOf(sid); if (i < ids.length - 1) { ids.splice(i, 1); ids.splice(i + 1, 0, sid); reorderSubjects(ids); } }],
-    ["Do kosza", () => { if (confirm(`Przenieść "${s.name}" ze wszystkimi kartami do kosza?`)) { trashSubject(sid); go("#/"); } }, "danger"]
+    ["Do kosza", () => { if (confirm(`Przenieść „${s.name}” ze wszystkimi kartami do kosza?`)) { trashSubject(sid); go("#/"); } }, "danger"]
   ]);
 }
 
@@ -146,7 +162,7 @@ export function popMenu(anchor, items) {
   document.body.appendChild(m);
   const r = anchor.getBoundingClientRect();
   m.style.left = Math.min(r.left, window.innerWidth - m.offsetWidth - 8) + "px";
-  m.style.top = r.bottom + 6 + "px";
+  m.style.top = Math.min(r.bottom + 6, window.innerHeight - m.offsetHeight - 8) + "px";
   const close = () => { m.remove(); document.removeEventListener("mousedown", onDoc); };
   const onDoc = (e) => { if (!m.contains(e.target)) close(); };
   setTimeout(() => document.addEventListener("mousedown", onDoc), 0);
@@ -161,15 +177,17 @@ export function renderSubject(root, sid, tab) {
   const groups = [];
   for (const t of tests) { let g = groups.find((x) => x.group === t.group); if (!g) { g = { group: t.group, name: t.name, kind: t.testKind, date: t.date, cards: [] }; groups.push(g); } g.cards.push(t); }
   const isTests = tab === "tests";
-  root.innerHTML = `${topbar({ back: "#/", title: `<span class="subj-title">${esc(s.emoji || "")} ${esc(s.name)}</span>`, right: homeRight() })}
+  root.innerHTML = `${topbar({ back: "#/", title: `<span class="tb-crumb">${esc(s.emoji || "")} ${esc(s.name)}</span>`, right: homeRight() })}
   <main class="subject">
-    <div class="tabs"><a href="#/s/${sid}" class="${isTests ? "" : "on"}">Lekcje</a><a href="#/s/${sid}?tab=tests" class="${isTests ? "on" : ""}">Na ocenę</a></div>
+    <div class="subject-head">
+      <nav class="tabs"><a href="#/s/${sid}" class="${isTests ? "" : "on"}">Lekcje<small>${lessons.length}</small></a><a href="#/s/${sid}?tab=tests" class="${isTests ? "on" : ""}">Na ocenę<small>${groups.length}</small></a></nav>
+      ${isTests ? `<button class="btn primary" data-new-test>${icon("plus", 16)}<span>Nowy test</span></button>` : `<button class="btn primary" data-new-lesson>${icon("plus", 16)}<span>Nowa lekcja</span></button>`}
+    </div>
     ${isTests ? `
-      <div class="list-head"><button class="primary" data-new-test>Nowa kartkówka / sprawdzian</button><span class="muted">Każdy test to trzy karty, po jednej na osobę. Cudzą można tylko oglądać.</span></div>
-      <div class="test-list">${groups.length ? groups.map((g) => `<div class="test-row"><div class="test-info"><span class="test-kind">${esc(g.kind)}</span><span class="test-name">${esc(g.name)}</span><span class="muted">${esc(fmtDate(g.date))}</span></div><div class="test-cards">${NAMES.map((n) => { const c = g.cards.find((x) => x.owner === n); const p = users.get(n) || {}; return c ? `<a class="chip ${n === me() ? "mine" : ""}" href="#/c/${c.id}" style="--c:${p.color || "#888"}">${avatarHtml({ name: n, color: p.color, avatar: p.avatar }, 22)}${n}${presenceHtml(whoOn(c.id), 18)}</a>` : ""; }).join("")}<button class="icon-btn" data-test-menu="${g.group}" title="Opcje">…</button></div></div>`).join("") : `<div class="empty-list">Jeszcze nic na ocenę.</div>`}</div>
+      <p class="muted lead">Każdy test to trzy karty, po jednej na osobę. Cudzą kartę można tylko oglądać.</p>
+      <div class="rows">${groups.length ? groups.map((g) => `<div class="row test-row"><span class="row-date">${esc(fmtDate(g.date))}</span><span class="row-main"><span class="row-title">${esc(g.name)}</span><span class="row-sub">${esc(g.kind)}</span></span><span class="test-cards">${NAMES.map((n) => { const c = g.cards.find((x) => x.owner === n); const p = users.get(n) || {}; return c ? `<a class="chip ${n === me() ? "mine" : ""}" href="#/c/${c.id}" style="--c:${p.color || "#888"}">${avatarHtml({ name: n, color: p.color, avatar: p.avatar }, 20)}<span>${n}</span>${presenceHtml(whoOn(c.id), 16)}</a>` : ""; }).join("")}</span><button class="icon-btn row-more" data-test-menu="${g.group}" title="Opcje">${icon("more")}</button></div>`).join("") : `<div class="empty-list">Jeszcze nic na ocenę. Nowy test tworzy trzy karty naraz.</div>`}</div>
     ` : `
-      <div class="list-head"><button class="primary" data-new-lesson>Nowa lekcja</button><span class="muted">${lessons.length} ${plural(lessons.length, "lekcja", "lekcje", "lekcji")}</span></div>
-      <div class="card-list">${lessons.length ? lessons.map((c) => `<a class="card-row" href="#/c/${c.id}"><span class="cr-date">${esc(fmtDate(c.date))}</span><span class="cr-title">${esc(c.title || "bez tematu")}</span><span class="cr-presence">${presenceHtml(whoOn(c.id), 20)}</span><button class="icon-btn" data-card-menu="${c.id}" title="Opcje">…</button></a>`).join("") : `<div class="empty-list">Pusto. Kliknij „Nowa lekcja”.</div>`}</div>
+      <div class="rows">${lessons.length ? lessons.map((c) => `<a class="row" href="#/c/${c.id}"><span class="row-date">${esc(fmtDate(c.date))}</span><span class="row-main"><span class="row-title">${esc(c.title || "bez tematu")}</span></span><span class="row-presence">${presenceHtml(whoOn(c.id), 20)}</span><button class="icon-btn row-more" data-card-menu="${c.id}" title="Opcje">${icon("more")}</button></a>`).join("") : `<div class="empty-list">Pusto. Pierwsza lekcja zacznie się od „Temat:”.</div>`}</div>
     `}
   </main>`;
   root.querySelector("main").addEventListener("click", (e) => {
@@ -177,55 +195,41 @@ export function renderSubject(root, sid, tab) {
     if (!b) return;
     e.preventDefault();
     if (b.hasAttribute("data-new-lesson")) go("#/c/" + createLesson(sid));
-    else if (b.hasAttribute("data-new-test")) newTestDialog(sid);
+    else if (b.hasAttribute("data-new-test")) dialog({ title: "Nowy test", fields: [{ name: "kind", label: "Rodzaj", type: "select", options: [["kartkówka", "Kartkówka"], ["sprawdzian", "Sprawdzian"]] }, { name: "name", label: "Nazwa", placeholder: "np. Genetyka, dział 2" }], ok: "Utwórz 3 karty", onOk: (v) => { if (!v.name) return false; go("#/c/" + createTest(sid, v.name, v.kind)); } });
     else if (b.dataset.cardMenu) {
       const c = card(b.dataset.cardMenu);
       popMenu(b, [
-        ["Zmień datę", () => { const d = prompt("Data (RRRR-MM-DD):", c.date); if (d && /^\d{4}-\d{2}-\d{2}$/.test(d)) updateCard(c.id, { date: d }); }],
-        ["Do kosza", () => { trashCard(c.id); }, "danger"]
+        ["Zmień datę", () => dialog({ title: "Data lekcji", fields: [{ name: "date", label: "RRRR-MM-DD", value: c.date }], ok: "Zapisz", onOk: (v) => { if (!/^\d{4}-\d{2}-\d{2}$/.test(v.date)) return false; updateCard(c.id, { date: v.date }); } })],
+        ["Do kosza", () => trashCard(c.id), "danger"]
       ]);
     } else if (b.dataset.testMenu) {
       const g = groups.find((x) => x.group === b.dataset.testMenu);
-      popMenu(b, [["Do kosza (wszystkie 3)", () => { if (confirm(`Przenieść "${g.name}" do kosza?`)) g.cards.forEach((c) => trashCard(c.id)); }, "danger"]]);
+      popMenu(b, [["Do kosza (wszystkie 3)", () => { if (confirm(`Przenieść „${g.name}” do kosza?`)) g.cards.forEach((c) => trashCard(c.id)); }, "danger"]]);
     }
   });
   bindTopbar(root);
 }
 
-function newTestDialog(sid) {
-  const box = document.createElement("div");
-  box.className = "modal-bg";
-  box.innerHTML = `<div class="modal"><h3>Nowy test</h3><label>Rodzaj<select><option value="kartkówka">Kartkówka</option><option value="sprawdzian">Sprawdzian</option></select></label><label>Nazwa<input placeholder="np. Genetyka, dział 2" autofocus></label><div class="modal-actions"><button class="cancel">Anuluj</button><button class="primary ok">Utwórz 3 karty</button></div></div>`;
-  document.body.appendChild(box);
-  const input = box.querySelector("input");
-  setTimeout(() => input.focus(), 30);
-  const close = () => box.remove();
-  box.querySelector(".cancel").addEventListener("click", close);
-  box.addEventListener("mousedown", (e) => { if (e.target === box) close(); });
-  const ok = () => { const n = input.value.trim(); if (!n) return input.focus(); const id = createTest(sid, n, box.querySelector("select").value); close(); go("#/c/" + id); };
-  box.querySelector(".ok").addEventListener("click", ok);
-  input.addEventListener("keydown", (e) => { if (e.key === "Enter") ok(); if (e.key === "Escape") close(); });
-}
-
 export function renderPlan(root) {
   const hs = hours();
   const subs = listSubjects();
-  root.innerHTML = `${topbar({ back: "#/", title: "Plan lekcji", right: homeRight() })}
-  <main class="plan"><p class="muted">Kliknij komórkę i wybierz przedmiot. Godziny zmienisz w ustawieniach.</p>
-  <table class="plan-grid"><thead><tr><th></th>${DAYS.map((d) => `<th>${d}</th>`).join("")}</tr></thead><tbody>${hs.map((h, i) => `<tr><th>${i + 1}<small>${esc(h)}</small></th>${DAYS.map((_, d) => { const sid = plan.get(`${d + 1}-${i}`); const s = sid ? subject(sid) : null; return `<td><button data-cell="${d + 1}-${i}" class="${s ? "" : "empty"}">${s ? `${esc(s.emoji || "")} ${esc(s.name)}` : "·"}</button></td>`; }).join("")}</tr>`).join("")}</tbody></table></main>`;
+  const now = nowLesson();
+  root.innerHTML = `${topbar({ back: "#/", title: `<span class="tb-crumb">Plan lekcji</span>`, right: homeRight() })}
+  <main class="plan"><p class="muted lead">Kliknij komórkę i wybierz przedmiot. Godziny zmienisz w ustawieniach.</p>
+  <table class="plan-grid"><thead><tr><th></th>${DAYS.map((d) => `<th>${d}</th>`).join("")}</tr></thead><tbody>${hs.map((h, i) => `<tr><th><b>${i + 1}</b><small>${esc(h)}</small></th>${DAYS.map((_, d) => { const sid = plan.get(`${d + 1}-${i}`); const s = sid ? subject(sid) : null; const isNow = now && now.day === d + 1 && now.slot === i; return `<td><button data-cell="${d + 1}-${i}" class="${s ? "" : "empty"} ${isNow ? "now" : ""}">${s ? `${esc(s.emoji || "")} ${esc(s.name)}` : ""}</button></td>`; }).join("")}</tr>`).join("")}</tbody></table></main>`;
   root.querySelector("main").addEventListener("click", (e) => {
     const b = e.target.closest("[data-cell]");
     if (!b) return;
-    popMenu(b, subs.map((s) => [`${s.emoji || ""} ${s.name}`.trim(), () => plan.set(b.dataset.cell, s.id)]).concat([["— pusto", () => plan.delete(b.dataset.cell), "muted"]]));
+    popMenu(b, subs.map((s) => [`${s.emoji || ""} ${s.name}`.trim(), () => plan.set(b.dataset.cell, s.id)]).concat([["Pusto", () => plan.delete(b.dataset.cell), "muted"]]));
   });
   bindTopbar(root);
 }
 
 export function renderTrash(root) {
   const items = trashItems();
-  root.innerHTML = `${topbar({ back: "#/", title: "Kosz", right: homeRight() })}
-  <main class="trash"><p class="muted">Rzeczy znikają na dobre po 30 dniach.</p>
-  <div class="card-list">${items.length ? items.map((it) => `<div class="card-row"><span class="cr-date">${it.type === "subject" ? "przedmiot" : esc(fmtDate(it.date))}</span><span class="cr-title">${esc(it.type === "subject" ? `${it.emoji || ""} ${it.name}` : (it.title || it.name || "bez tematu"))}${it.type === "card" && subject(it.subject) ? ` <small class="muted">· ${esc(subject(it.subject).name)}${it.owner ? " · " + esc(it.owner) : ""}</small>` : ""}</span><button data-restore="${it.type}:${it.id}">Przywróć</button></div>`).join("") : `<div class="empty-list">Kosz jest pusty.</div>`}</div></main>`;
+  root.innerHTML = `${topbar({ back: "#/", title: `<span class="tb-crumb">Kosz</span>`, right: homeRight() })}
+  <main class="trash"><p class="muted lead">Rzeczy znikają na dobre po 30 dniach.</p>
+  <div class="rows">${items.length ? items.map((it) => `<div class="row"><span class="row-date">${it.type === "subject" ? "przedmiot" : esc(fmtDate(it.date))}</span><span class="row-main"><span class="row-title">${esc(it.type === "subject" ? `${it.emoji || ""} ${it.name}` : (it.title || it.name || "bez tematu"))}</span>${it.type === "card" && subject(it.subject) ? `<span class="row-sub">${esc(subject(it.subject).name)}${it.owner ? " · " + esc(it.owner) : ""}</span>` : ""}</span><button class="btn small" data-restore="${it.type}:${it.id}">${icon("restore", 14)}<span>Przywróć</span></button></div>`).join("") : `<div class="empty-list">Kosz jest pusty.</div>`}</div></main>`;
   root.querySelector("main").addEventListener("click", (e) => {
     const b = e.target.closest("[data-restore]");
     if (!b) return;
@@ -239,22 +243,22 @@ export function renderSettings(root) {
   const name = me();
   const p = myProfile();
   const hs = hours();
-  root.innerHTML = `${topbar({ back: "#/", title: "Ustawienia", right: homeRight() })}
+  root.innerHTML = `${topbar({ back: "#/", title: `<span class="tb-crumb">Ustawienia</span>`, right: homeRight() })}
   <main class="settings">
-    <section><h3>Wspólne</h3>
+    <section><div class="eyebrow">Wspólne dla trzech</div>
       <label>Domyślna czcionka<select data-set="font">${FONTS.map((f) => `<option ${(settings.get("font") || "Montserrat") === f ? "selected" : ""}>${f}</option>`).join("")}</select></label>
-      <label>Godziny lekcji (start każdej)<div class="hours">${hs.map((h, i) => `<input data-hour="${i}" value="${esc(h)}" size="5">`).join("")}</div></label>
+      <label>Godziny lekcji<div class="hours">${hs.map((h, i) => `<input data-hour="${i}" value="${esc(h)}" size="5">`).join("")}</div></label>
     </section>
-    <section><h3>Ja: ${esc(name)}</h3>
-      <div class="profile-row"><label class="avatar-pick" style="--c:${p.color || "#555"}">${avatarHtml({ name, color: p.color, avatar: p.avatar }, 80)}<input type="file" accept="image/*,.gif" hidden><span>zmień zdjęcie (lub gif)</span></label>
-      <div><div class="swatches big">${PALETTE.map((c) => `<button data-mycolor="${c}" style="--c:${c}" class="${c === p.color ? "on" : ""}"></button>`).join("")}</div>
-      <label>Imię i nazwisko<input data-me="fullName" value="${esc(p.fullName || "")}"></label></div></div>
-      <label>Podpis odręczny (do kartkówek)</label>
-      <div class="sig-box"><canvas class="sig" width="560" height="200"></canvas><div class="sig-actions"><button data-sig="clear">Wyczyść</button><button data-sig="save" class="primary">Zapisz podpis</button>${p.signature ? `<img class="sig-preview" src="${esc(p.signature)}" alt="podpis">` : ""}</div></div>
+    <section><div class="eyebrow">Ja: ${esc(name)}</div>
+      <div class="profile-row"><label class="avatar-pick" style="--c:${p.color || "#555"}">${avatarHtml({ name, color: p.color, avatar: p.avatar }, 88)}<input type="file" accept="image/*,.gif" hidden><span>zmień zdjęcie lub gif</span></label>
+      <div class="profile-fields"><div class="swatches big">${PALETTE.map((c) => `<button data-mycolor="${c}" style="--c:${c}" class="${c === p.color ? "on" : ""}" title="Kolor"></button>`).join("")}</div>
+      <label>Imię i nazwisko (na kartkówkach, klasa 8K)<input data-me="fullName" value="${esc(p.fullName || "")}"></label></div></div>
+      <label>Podpis odręczny do kartkówek</label>
+      <div class="sig-box"><canvas class="sig" width="560" height="200"></canvas><div class="sig-actions"><button class="btn" data-sig="clear">Wyczyść</button><button class="btn primary" data-sig="save">Zapisz podpis</button>${p.signature ? `<img class="sig-preview" src="${esc(p.signature)}" alt="podpis">` : ""}</div></div>
     </section>
-    <section><h3>Ten komputer</h3>
-      <label class="check"><input type="checkbox" data-local="straighten" ${localStorage.getItem("pupka-straighten") !== "0" ? "checked" : ""}> Prostuj odręczne kształty (prostokąt, koło, linia)</label>
-      <button data-go="#/switch">Zmień osobę</button>
+    <section><div class="eyebrow">Ten komputer</div>
+      <p class="muted hint">Błędy podkreśla przeglądarka, poprawkę wybierasz prawym klikiem na słowie. Jeśli nie podkreśla polskich słów: w Chrome lub Brave wejdź w Ustawienia → Języki → Sprawdzanie pisowni i włącz polski. W Safari działa słownik systemowy.</p>
+      <button class="btn" data-go="#/switch">Zmień osobę</button>
     </section>
     <img class="watermark settings-wm" src="assets/gzowo-labs-fire.gif" alt="Gzowo Labs">
   </main>`;
@@ -262,9 +266,8 @@ export function renderSettings(root) {
   main.addEventListener("change", async (e) => {
     const t = e.target;
     if (t.dataset.set === "font") settings.set("font", t.value);
-    else if (t.dataset.hour != null) { const arr = hours().slice(); arr[+t.dataset.hour] = t.value.trim() || DEFAULT_HOURS[+t.dataset.hour]; settings.set("hours", arr); }
+    else if (t.dataset.hour != null) { const arr = hours().slice(); const v = t.value.trim(); arr[+t.dataset.hour] = /^\d{1,2}:\d{2}$/.test(v) ? v : DEFAULT_HOURS[+t.dataset.hour]; t.value = arr[+t.dataset.hour]; settings.set("hours", arr); }
     else if (t.dataset.me) { users.set(name, Object.assign({}, myProfile(), { [t.dataset.me]: t.value.trim() })); updatePresence(); }
-    else if (t.dataset.local === "straighten") localStorage.setItem("pupka-straighten", t.checked ? "1" : "0");
     else if (t.type === "file") {
       const f = t.files[0]; if (!f) return;
       try { const url = await uploadImage(f, name, 320); users.set(name, Object.assign({}, myProfile(), { avatar: url })); updatePresence(); main.querySelector(".avatar-pick .avatar").innerHTML = `<img src="${url}" alt="">`; } catch (err) { alert(err.message); }
@@ -290,7 +293,7 @@ function signaturePad(canvas, onSave) {
   ctx.lineWidth = 3; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = "#111";
   let drawing = false, last = null, dirty = false;
   const pos = (e) => { const r = canvas.getBoundingClientRect(); return [(e.clientX - r.left) * (canvas.width / r.width), (e.clientY - r.top) * (canvas.height / r.height)]; };
-  canvas.addEventListener("pointerdown", (e) => { drawing = true; last = pos(e); canvas.setPointerCapture(e.pointerId); e.preventDefault(); });
+  canvas.addEventListener("pointerdown", (e) => { drawing = true; last = pos(e); try { canvas.setPointerCapture(e.pointerId); } catch (err) { /* synthetic */ } e.preventDefault(); });
   canvas.addEventListener("pointermove", (e) => { if (!drawing) return; const p = pos(e); ctx.beginPath(); ctx.moveTo(last[0], last[1]); ctx.lineTo(p[0], p[1]); ctx.stroke(); last = p; dirty = true; });
   const stop = () => { drawing = false; };
   canvas.addEventListener("pointerup", stop);
@@ -305,7 +308,7 @@ export function openSearch() {
   if (document.querySelector(".search-bg")) return;
   const bg = document.createElement("div");
   bg.className = "search-bg";
-  bg.innerHTML = `<div class="search"><input placeholder="Szukaj we wszystkich notatkach…" autofocus><div class="results"></div></div>`;
+  bg.innerHTML = `<div class="search">${icon("search")}<input placeholder="Szukaj we wszystkich notatkach" autofocus><div class="results"></div></div>`;
   document.body.appendChild(bg);
   const input = bg.querySelector("input");
   const res = bg.querySelector(".results");

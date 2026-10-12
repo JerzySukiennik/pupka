@@ -4,6 +4,7 @@ import { TextSelection } from "../lib/vendor.js";
 import { aiChat, aiRewrite } from "./net.js";
 import { parseMarkdown, docToBlocks, mdToHtml, esc } from "./md.js";
 import { me, allCards, subject, fmtDate, AI_COLOR, colorOf } from "./store.js";
+import { icon } from "./icons.js";
 
 function cardsIndexText(currentId) {
   return allCards().filter((c) => c.id !== currentId && c.kind === "lesson").sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 300)
@@ -25,6 +26,7 @@ export function applyEdits(editor, ops, bids) {
     }
     if (!hit) { targets.push({ at: doc.content.size, nodes, kind: "insert" }); continue; }
     const from = hit.pos, to = hit.pos + hit.node.nodeSize;
+    if (op.op === "replace" && nodes.length && nodes[0].type.spec.attrs && "bid" in nodes[0].type.spec.attrs) nodes[0] = nodes[0].type.create(Object.assign({}, nodes[0].attrs, { bid }), nodes[0].content, nodes[0].marks);
     if (op.op === "replace") targets.push({ from, to, nodes, kind: "replace" });
     else if (op.op === "delete") targets.push({ from, to, nodes: [], kind: "replace" });
     else if (op.op === "insert_after") targets.push({ at: to, nodes, kind: "insert" });
@@ -47,10 +49,10 @@ export function applyEdits(editor, ops, bids) {
 export function createAiPanel({ editor, entry, getCard, container, onEdited }) {
   const chat = entry.doc.getArray("chat");
   container.innerHTML = `
-    <div class="ai-head"><span class="ai-dot"></span><b>AI</b><span class="ai-sub">Haiku 5.5 · wspólny czat tej karty</span><button class="icon-btn ai-close" title="Zamknij (Cmd+J)">✕</button></div>
+    <div class="ai-head">${icon("sparkle", 16)}<b>AI</b><span class="ai-sub">wspólny czat tej karty</span><button class="icon-btn ai-close" title="Zamknij (Cmd+J)">${icon("close", 16)}</button></div>
     <div class="ai-msgs"></div>
     <div class="ai-status"></div>
-    <form class="ai-form"><textarea rows="1" placeholder="Zapytaj, poproś o poprawkę albo o obrazek…"></textarea><button type="submit" class="ai-send" title="Wyślij (Enter)">➤</button></form>`;
+    <form class="ai-form"><textarea rows="1" placeholder="Zapytaj, poproś o poprawkę albo o obrazek…"></textarea><button type="submit" class="ai-send" title="Wyślij (Enter)">${icon("send", 16)}</button></form>`;
   const msgs = container.querySelector(".ai-msgs");
   const status = container.querySelector(".ai-status");
   const form = container.querySelector(".ai-form");
@@ -160,6 +162,9 @@ export function createSelectionMenu({ editor, aiPanel, isDrawing }) {
   el.innerHTML = `<button data-m="explain">Wyjaśnij</button><button data-m="expand">Rozwiń</button><button data-m="fix">Popraw</button><button data-m="shorten">Skróć</button><span class="sel-spin"></span>`;
   document.body.appendChild(el);
   let busy = false;
+  let quietUntil = 0;
+  const onCtx = () => { quietUntil = Date.now() + 1500; el.classList.remove("on"); };
+  editor.view.dom.addEventListener("contextmenu", onCtx);
   function selectedText() {
     const { from, to, empty } = editor.state.selection;
     if (empty) return "";
@@ -169,7 +174,7 @@ export function createSelectionMenu({ editor, aiPanel, isDrawing }) {
     if (busy) return;
     const { from, to, empty } = editor.state.selection;
     const text = selectedText();
-    if (empty || !text.trim() || text.length < 3 || !editor.isEditable || isDrawing() || !editor.view.hasFocus()) { el.classList.remove("on"); return; }
+    if (empty || !text.trim() || text.length < 3 || !editor.isEditable || isDrawing() || !editor.view.hasFocus() || Date.now() < quietUntil) { el.classList.remove("on"); return; }
     const a = editor.view.coordsAtPos(from), b = editor.view.coordsAtPos(to);
     const top = Math.min(a.top, b.top) - 44;
     const left = Math.max(8, Math.min(window.innerWidth - el.offsetWidth - 8, (a.left + b.left) / 2 - el.offsetWidth / 2));
@@ -205,5 +210,5 @@ export function createSelectionMenu({ editor, aiPanel, isDrawing }) {
     busy = false;
     el.classList.remove("busy", "on");
   });
-  return { destroy() { editor.off("selectionUpdate", update); el.remove(); } };
+  return { destroy() { editor.off("selectionUpdate", update); editor.view.dom.removeEventListener("contextmenu", onCtx); el.remove(); } };
 }

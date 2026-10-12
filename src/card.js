@@ -8,6 +8,7 @@ import { uploadImage } from "./net.js";
 import { card as getCard, subject, me, myProfile, profileOf, openCardDoc, closeCardDoc, updateCard, updatePresence, settings, fmtDateLong, FONTS, trashCard, state, onChange } from "./store.js";
 import { docToPlain, esc } from "./md.js";
 import { topbar, avatarHtml, presenceHtml } from "./ui.js";
+import { icon } from "./icons.js";
 
 const PAGE_CONTENT_H = 971;
 
@@ -28,43 +29,43 @@ export function openCard(root, id) {
       ${topbar({ back: `#/s/${c.subject}${isTest ? "?tab=tests" : ""}`, title: `<span class="crumb">${esc(sub ? sub.name : "")}</span><span class="card-title">${esc(c.title || (isTest ? c.name : "Nowa lekcja"))}</span>`, right: `<div class="presence"></div>` })}
       <div class="toolbar">
         <div class="tb-left">
-          <div class="seg mode"><button data-mode="text" class="on" title="Pisanie (Esc)">Tekst</button><button data-mode="draw" title="Rysowanie (Cmd+D)">Rysuj</button></div>
+          <div class="seg mode"><button data-mode="text" class="on" title="Pisanie (Esc)">${icon("text", 16)}<span>Tekst</span></button><button data-mode="draw" title="Rysowanie (Cmd+D)">${icon("pen", 16)}<span>Rysuj</span></button></div>
         </div>
         <div class="tb-scroll">
         <div class="tb-group text-tools">
-          <button data-cmd="undo" title="Cofnij (Cmd+Z)">↶</button><button data-cmd="redo" title="Ponów (Cmd+Shift+Z)">↷</button>
+          <button data-cmd="undo" title="Cofnij (Cmd+Z)">${icon("undo")}</button><button data-cmd="redo" title="Ponów (Cmd+Shift+Z)">${icon("redo")}</button>
           <span class="sep"></span>
           <select class="font-sel" title="Czcionka">${FONTS.map((f) => `<option value="${f}">${f}</option>`).join("")}</select>
-          <select class="block-sel" title="Styl akapitu"><option value="p">Zwykły</option><option value="1">Nagłówek 1</option><option value="2">Nagłówek 2</option><option value="3">Nagłówek 3</option></select>
+          <select class="block-sel" title="Styl akapitu"><option value="p">Zwykły tekst</option><option value="1">Nagłówek 1</option><option value="2">Nagłówek 2</option><option value="3">Nagłówek 3</option></select>
           <span class="sep"></span>
-          <button data-cmd="bold" title="Pogrubienie (Cmd+B)"><b>B</b></button><button data-cmd="italic" title="Kursywa (Cmd+I)"><i>I</i></button><button data-cmd="underline" title="Podkreślenie (Cmd+U)"><u>U</u></button><button data-cmd="strike" title="Przekreślenie"><s>S</s></button>
-          <button data-cmd="superscript" title="Indeks górny (^x^)">x<sup>2</sup></button><button data-cmd="subscript" title="Indeks dolny (~x~)">H<sub>2</sub></button>
+          <button data-cmd="bold" class="glyph" title="Pogrubienie (Cmd+B)"><b>B</b></button><button data-cmd="italic" class="glyph" title="Kursywa (Cmd+I)"><i>I</i></button><button data-cmd="underline" class="glyph" title="Podkreślenie (Cmd+U)"><u>U</u></button><button data-cmd="strike" class="glyph" title="Przekreślenie"><s>S</s></button>
+          <button data-cmd="superscript" class="glyph" title="Indeks górny (^x^)">x<sup>2</sup></button><button data-cmd="subscript" class="glyph" title="Indeks dolny (~x~)">H<sub>2</sub></button>
           <span class="sep"></span>
-          <button data-cmd="bulletList" title="Lista (- )">•≡</button><button data-cmd="orderedList" title="Numeracja (1. )">1≡</button><button data-cmd="blockquote" title="Cytat (> )">❝</button>
+          <button data-cmd="bulletList" title="Lista (- )">${icon("list")}</button><button data-cmd="orderedList" title="Numeracja (1. )">${icon("listNum")}</button><button data-cmd="blockquote" title="Cytat (> )">${icon("quote")}</button>
           <span class="sep"></span>
-          <button data-cmd="table" title="Tabela">⊞</button><button data-cmd="image" title="Obrazek (albo wklej / przeciągnij)">🖼</button><button data-cmd="math" title="Wzór ($x^2$)">∑</button>
-          <div class="dd"><button data-cmd="callout" title="Ramka (!d !w !z)">▣</button><div class="dd-menu"><button data-callout="definicja">Definicja</button><button data-callout="wazne">Ważne</button><button data-callout="wzor">Wzór</button></div></div>
-          ${isTest && canEdit ? `<span class="sep"></span><button data-cmd="signature" title="Wstaw mój podpis">✍︎ Podpis</button>` : ""}
+          <button data-cmd="table" title="Tabela">${icon("table")}</button><button data-cmd="image" title="Obrazek (albo wklej / przeciągnij)">${icon("image")}</button><button data-cmd="math" title="Wzór ($x^2$)">${icon("formula")}</button>
+          <div class="dd"><button data-cmd="callout" title="Ramka: definicja, ważne, wzór (!d !w !z)">${icon("box")}</button><div class="dd-menu"><button data-callout="definicja">Definicja</button><button data-callout="wazne">Ważne</button><button data-callout="wzor">Wzór</button></div></div>
+          ${isTest && canEdit ? `<span class="sep"></span><button data-cmd="signature" class="labeled" title="Wstaw mój podpis">${icon("sign")}<span>Podpis</span></button>` : ""}
         </div>
         <div class="tb-group draw-tools">
-          <button data-tool="pen" class="on" title="Pióro (P, Shift = prosta)">✎</button><button data-tool="hl" title="Zakreślacz (H)">▮</button><button data-tool="eraser" title="Gumka (E)">◻︎</button><button data-tool="lasso" title="Lasso: zaznacz, przesuń, kopiuj (L)">◌</button>
+          <button data-tool="pen" class="on" title="Pióro (P, Shift = prosta)">${icon("pen")}</button><button data-tool="hl" title="Zakreślacz (H)">${icon("marker")}</button><button data-tool="eraser" title="Gumka (E)">${icon("eraser")}</button><button data-tool="lasso" title="Lasso: zaznacz, przesuń, kopiuj (L)">${icon("lasso")}</button>
           <span class="sep"></span>
-          <button data-tool="line" title="Linia">╱</button><button data-tool="arrow" title="Strzałka">↗</button><button data-tool="rect" title="Prostokąt">▭</button><button data-tool="ellipse" title="Elipsa">◯</button><button data-tool="label" title="Tekst na rysunku (T)">T</button>
+          <button data-tool="line" title="Linia">${icon("line")}</button><button data-tool="arrow" title="Strzałka (A)">${icon("arrow")}</button><button data-tool="rect" title="Prostokąt (R)">${icon("rect")}</button><button data-tool="ellipse" title="Elipsa (O)">${icon("ellipse")}</button><button data-tool="label" title="Tekst na rysunku (T)">${icon("text")}</button>
           <span class="sep"></span>
-          <div class="swatches">${COLORS.map((col) => `<button data-color="${col}" style="--c:${col}" title="${col}"></button>`).join("")}</div>
+          <div class="swatches">${COLORS.map((col) => `<button data-color="${col}" style="--c:${col}" title="Kolor"></button>`).join("")}</div>
           <span class="sep"></span>
-          <div class="sizes">${SIZES.map((s) => `<button data-size="${s}" title="Grubość ${s}"><i style="width:${s + 4}px;height:${s + 4}px"></i></button>`).join("")}</div>
+          <div class="sizes">${SIZES.map((s, i) => `<button data-size="${s}" title="Grubość ${i + 1}"><i style="width:${s + 4}px;height:${s + 4}px"></i></button>`).join("")}</div>
           <span class="sep"></span>
-          <button data-draw="undo" title="Cofnij rysunek (Cmd+Z)">↶</button><button data-draw="redo" title="Ponów (Cmd+Shift+Z)">↷</button>
-          <button data-draw="grid" title="Siatka pomocnicza (nie drukuje się)">⋮⋮</button><button data-draw="straighten" title="Prostowanie kształtów">⟟</button>
-          <button data-draw="delete" title="Usuń zaznaczone (Backspace)">🗑</button>
+          <button data-draw="undo" title="Cofnij rysunek (Cmd+Z)">${icon("undo")}</button><button data-draw="redo" title="Ponów (Cmd+Shift+Z)">${icon("redo")}</button>
+          <button data-draw="grid" title="Siatka pomocnicza (nie drukuje się)">${icon("grid")}</button>
+          <button data-draw="delete" title="Usuń zaznaczone (Backspace)">${icon("trash")}</button>
         </div>
         </div>
         <div class="tb-right">
-          <button data-ui="cursors" class="${cursorsHidden ? "" : "on"}" title="Pokaż/schowaj kursory innych">👁</button>
-          <button data-ui="breaks" title="Granice stron A4">▤</button>
-          <button data-ui="print" title="Drukuj (Cmd+P)">⎙</button>
-          <button data-ui="ai" title="Czat AI (Cmd+J)">✦ AI</button>
+          <button data-ui="cursors" class="${cursorsHidden ? "" : "on"}" title="Pokaż lub schowaj kursory innych">${icon(cursorsHidden ? "eyeOff" : "eye")}</button>
+          <button data-ui="breaks" title="Granice stron A4">${icon("pages")}</button>
+          <button data-ui="print" title="Drukuj (Cmd+P)">${icon("print")}</button>
+          <button data-ui="ai" class="labeled ai-btn" title="Czat AI (Cmd+J)">${icon("sparkle")}<span>AI</span></button>
         </div>
       </div>
       <div class="card-body">
@@ -126,7 +127,6 @@ export function openCard(root, id) {
     view.querySelectorAll("[data-color]").forEach((b) => b.classList.toggle("on", b.dataset.color === s.color));
     view.querySelectorAll("[data-size]").forEach((b) => b.classList.toggle("on", +b.dataset.size === s.size));
     const g = view.querySelector('[data-draw="grid"]'); if (g) g.classList.toggle("on", s.grid);
-    const st = view.querySelector('[data-draw="straighten"]'); if (st) st.classList.toggle("on", s.straighten);
     const del = view.querySelector('[data-draw="delete"]'); if (del) del.disabled = !s.selection;
   }
   syncDrawUi(draw.getState());
@@ -142,7 +142,7 @@ export function openCard(root, id) {
     if (b.dataset.size) return draw.setSize(+b.dataset.size);
     if (b.dataset.draw) {
       const a = b.dataset.draw;
-      if (a === "undo") draw.undo(); else if (a === "redo") draw.redo(); else if (a === "grid") draw.toggleGrid(); else if (a === "straighten") draw.toggleStraighten(); else if (a === "delete") draw.deleteSelection();
+      if (a === "undo") draw.undo(); else if (a === "redo") draw.redo(); else if (a === "grid") draw.toggleGrid(); else if (a === "delete") draw.deleteSelection();
       return;
     }
     if (b.dataset.callout) { editor.chain().focus().toggleCallout(b.dataset.callout).run(); return; }
@@ -151,7 +151,7 @@ export function openCard(root, id) {
       if (a === "ai") aiPanel.toggle();
       else if (a === "print") window.print();
       else if (a === "breaks") { pageEl.classList.toggle("show-breaks"); b.classList.toggle("on"); }
-      else if (a === "cursors") { const hidden = !document.body.classList.contains("hide-cursors"); document.body.classList.toggle("hide-cursors", hidden); localStorage.setItem("pupka-cursors", hidden ? "0" : "1"); b.classList.toggle("on", !hidden); }
+      else if (a === "cursors") { const hidden = !document.body.classList.contains("hide-cursors"); document.body.classList.toggle("hide-cursors", hidden); localStorage.setItem("pupka-cursors", hidden ? "0" : "1"); b.classList.toggle("on", !hidden); b.innerHTML = icon(hidden ? "eyeOff" : "eye"); }
       return;
     }
     const cmd = b.dataset.cmd;
