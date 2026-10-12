@@ -1,6 +1,6 @@
 /* Boot: connect the index, pick a person, route by hash, re-render on shared changes. */
 
-import { connectIndex, resetLocalIfNeeded, onChange, me, setMe, purgeOld, NAMES, card, state, warmCard, users } from "./store.js";
+import { connectIndex, resetLocalIfNeeded, onChange, me, setMe, purgeOld, NAMES, card, state, warmCard, users, touchSubject } from "./store.js";
 import { renderPicker, renderHome, renderSubject, renderPlan, renderTrash, renderSettings, openSearch } from "./home.js";
 import { openCard } from "./card.js";
 
@@ -32,6 +32,8 @@ function route(force) {
   root.innerHTML = "";
   currentKey = key;
   const token = ++routeToken;
+  if (parts[0] === "s" && parts[1]) touchSubject(parts[1]);
+  if (parts[0] === "c" && parts[1]) { const cc = card(parts[1]); if (cc) touchSubject(cc.subject); }
   if (parts[0] === "c" && parts[1]) {
     const id = parts[1];
     root.innerHTML = `<div class="empty">Ładuję kartę…</div>`;

@@ -1,6 +1,6 @@
 /* Screens outside the editor: person picker, home, subject, plan, trash, settings, search. */
 
-import { NAMES, PALETTE, FONTS, DAYS, DEFAULT_HOURS, users, settings, plan, listSubjects, listCards, allCards, subject, card, createSubject, updateSubject, reorderSubjects, createLesson, createTest, updateCard, trashCard, trashSubject, restoreCard, restoreSubject, trashItems, presence, setMe, me, myProfile, nowLesson, hours, today, fmtDate, fmtDateLong, updatePresence, state, onChange } from "./store.js";
+import { NAMES, PALETTE, FONTS, DAYS, DEFAULT_HOURS, users, settings, plan, listSubjects, rankedSubjects, listCards, allCards, subject, card, createSubject, updateSubject, reorderSubjects, createLesson, createTest, updateCard, trashCard, trashSubject, restoreCard, restoreSubject, trashItems, presence, setMe, me, myProfile, nowLesson, hours, today, fmtDate, fmtDateLong, updatePresence, state, onChange } from "./store.js";
 import { uploadImage, dataUrlToBlob } from "./net.js";
 import { topbar, avatarHtml, presenceHtml } from "./ui.js";
 import { icon } from "./icons.js";
@@ -82,7 +82,7 @@ function whoOnSubject(sid) { const ids = new Set(listCards(sid).map((c) => c.id)
 
 export function renderHome(root) {
   const now = nowLesson();
-  const subs = listSubjects();
+  const ranked = rankedSubjects();
   const todayCard = now && now.subject ? listCards(now.subject.id, "lesson").find((c) => c.date === today()) : null;
   const d = new Date();
   root.innerHTML = `${topbar({ title: "", right: homeRight() })}
@@ -90,14 +90,16 @@ export function renderHome(root) {
     <header class="home-head"><h1>${esc(WEEKDAYS[d.getDay()])}</h1><div class="home-date">${esc(fmtDateLong(today()))}</div></header>
     ${now && now.subject ? `<section class="now"><div class="now-text"><span class="eyebrow">Teraz · ${esc(now.time)}</span><h2>${esc(now.subject.emoji || "")} ${esc(now.subject.name)}</h2></div><div class="now-actions">${todayCard ? `<button class="btn primary" data-open="${todayCard.id}">Otwórz dzisiejszą lekcję</button><button class="btn" data-new-lesson="${now.subject.id}">Nowa lekcja</button>` : `<button class="btn primary" data-new-lesson="${now.subject.id}">Nowa lekcja</button>`}</div></section>` : (plan.size ? "" : `<section class="now quiet"><div class="now-text"><span class="eyebrow">Plan lekcji</span><h2>Wpisz plan, a Pupka sama otworzy właściwy przedmiot</h2></div><div class="now-actions"><button class="btn" data-go="#/plan">Uzupełnij plan</button></div></section>`)}
     <div class="eyebrow list-eyebrow">Przedmioty</div>
-    <div class="rows">
-      ${subs.map((s) => {
+    <div class="bento">
+      ${ranked.map((s, i) => {
         const lessons = listCards(s.id, "lesson");
         const tests = listCards(s.id, "test");
         const last = lessons[0];
-        return `<a class="row subject-row" href="#/s/${s.id}"><span class="row-emoji">${esc(s.emoji || "")}</span><span class="row-main"><span class="row-title">${esc(s.name)}</span><span class="row-sub">${lessons.length ? `${lessons.length} ${plural(lessons.length, "lekcja", "lekcje", "lekcji")}${tests.length ? ` · ${Math.round(tests.length / 3)} na ocenę` : ""} · ${esc(fmtDate(last.date))} ${esc(last.title || "bez tematu")}` : "jeszcze pusto"}</span></span><span class="row-presence">${presenceHtml(whoOnSubject(s.id), 22)}</span><button class="icon-btn row-more" data-subject-menu="${s.id}" title="Opcje">${icon("more")}</button></a>`;
+        const tier = i === 0 ? "xl" : i <= 2 ? "md" : "sm";
+        const meta = `${lessons.length} ${plural(lessons.length, "lekcja", "lekcje", "lekcji")}${tests.length ? ` · ${Math.round(tests.length / 3)} na ocenę` : ""}`;
+        return `<a class="tile-b ${tier}" href="#/s/${s.id}"><span class="tb-top"><span class="tb-emoji">${esc(s.emoji || "")}</span><button class="icon-btn row-more" data-subject-menu="${s.id}" title="Opcje">${icon("more")}</button></span><span class="tb-name">${esc(s.name)}</span><span class="tb-meta">${esc(meta)}</span>${tier !== "sm" ? `<span class="tb-last">${last ? `<small>${esc(fmtDate(last.date))}</small>${esc(last.title || "bez tematu")}` : "<small>jeszcze pusto</small>"}</span>` : ""}${tier === "xl" ? `<span class="tb-foot"><button class="btn small" data-new-lesson="${s.id}">${icon("plus", 14)}<span>Nowa lekcja</span></button></span>` : ""}<span class="tb-presence">${presenceHtml(whoOnSubject(s.id), 22)}</span></a>`;
       }).join("")}
-      <button class="row ghost" data-new-subject>${icon("plus")}<span>Nowy przedmiot</span></button>
+      <button class="tile-b sm ghost" data-new-subject>${icon("plus", 20)}<span>Nowy przedmiot</span></button>
     </div>
     <img class="watermark home-wm" src="assets/gzowo-labs-fire.gif" alt="Gzowo Labs">
   </main>`;

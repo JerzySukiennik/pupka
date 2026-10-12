@@ -103,6 +103,18 @@ export function listSubjects(includeDeleted = false) {
   subjects.forEach((s, id) => { if (includeDeleted || !s.deleted) out.push(Object.assign({ id }, s)); });
   return out.sort((a, b) => (a.order || 0) - (b.order || 0) || (a.created || 0) - (b.created || 0));
 }
+function openedKey() { return "pupka-opened-" + (state.me || "x"); }
+function openedMap() { try { return JSON.parse(localStorage.getItem(openedKey()) || "{}"); } catch (e) { return {}; } }
+export function touchSubject(sid) {
+  if (!sid || !state.me) return;
+  try { const m = openedMap(); m[sid] = Date.now(); localStorage.setItem(openedKey(), JSON.stringify(m)); } catch (e) { /* storage blocked */ }
+}
+export function rankedSubjects() {
+  const opened = openedMap();
+  const latest = {};
+  cards.forEach((c) => { if (!c.deleted && c.subject) latest[c.subject] = Math.max(latest[c.subject] || 0, c.updated || c.created || 0); });
+  return listSubjects().sort((a, b) => (opened[b.id] || 0) - (opened[a.id] || 0) || (latest[b.id] || 0) - (latest[a.id] || 0) || (a.order || 0) - (b.order || 0));
+}
 export function listCards(subjectId, kind) {
   const out = [];
   cards.forEach((c, id) => { if (c.subject === subjectId && !c.deleted && (!kind || c.kind === kind)) out.push(Object.assign({ id }, c)); });
