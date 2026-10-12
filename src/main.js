@@ -1,6 +1,6 @@
 /* Boot: connect the index, pick a person, route by hash, re-render on shared changes. */
 
-import { connectIndex, resetLocalIfNeeded, onChange, me, setMe, purgeOld, NAMES, card, state, warmCard } from "./store.js";
+import { connectIndex, resetLocalIfNeeded, onChange, me, setMe, purgeOld, NAMES, card, state, warmCard, users } from "./store.js";
 import { renderPicker, renderHome, renderSubject, renderPlan, renderTrash, renderSettings, openSearch } from "./home.js";
 import { openCard } from "./card.js";
 
@@ -57,6 +57,7 @@ function pick() {
 window.addEventListener("hashchange", () => route(false));
 onChange((kind) => {
   if (picking) return;
+  if (me() && state.indexProvider.synced && !(users.get(me()) || {}).color) { pick(); return; }
   const { parts } = parse();
   if (parts[0] === "c") { if (current && current.missing && card(parts[1])) route(true); return; }
   const active = document.activeElement;
@@ -73,7 +74,7 @@ document.addEventListener("keydown", (e) => {
 root.innerHTML = `<div class="empty">Ładuję…</div>`;
 await state.ready;
 const saved = sessionStorage.getItem("pupka-me");
-if (saved && NAMES.includes(saved)) { setMe(saved); route(true); } else pick();
+if (saved && NAMES.includes(saved) && (users.get(saved) || {}).color) { setMe(saved); route(true); } else pick();
 
 window.addEventListener("beforeprint", () => document.body.classList.add("printing"));
 window.addEventListener("afterprint", () => document.body.classList.remove("printing"));
