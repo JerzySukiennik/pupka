@@ -1,6 +1,6 @@
 /* Card screen: TipTap editor bound to the card's Yjs doc, toolbar, drawing layer, presence, AI panel, print. */
 
-import { Editor, StarterKit, Collaboration, CollaborationCursor, Underline, Subscript, Superscript, Table, TableRow, TableCell, TableHeader, Placeholder, TextStyle, FontFamily, TextAlign } from "../lib/vendor.js";
+import { Editor, StarterKit, Collaboration, CollaborationCursor, Underline, Subscript, Superscript, Table, TableRow, TableCell, TableHeader, Placeholder, TextStyle, FontFamily, TextAlign, yUndoPluginKey } from "../lib/vendor.js";
 import { BlockId, MathNode, Callout, TestHeader, ResizableImage, Shortcuts, KINDS, closeMathPopover } from "./extensions.js";
 import { createDraw, COLORS, SIZES } from "./draw.js";
 import { createAiPanel, createSelectionMenu } from "./ai.js";
@@ -108,8 +108,11 @@ export function openCard(root, id) {
   });
   const pmEl = editorEl.querySelector(".ProseMirror");
 
-  const draw = createDraw({ pageEl, pmEl, ydoc: entry.doc, provider: entry.provider, name, color: prof.color || "#111", canEdit: () => canEdit, onChange: syncDrawUi });
-  const aiPanel = createAiPanel({ editor, entry, getCard: () => getCard(id) || c, container: view.querySelector(".ai-panel"), onEdited: () => draw.rerender(), draw });
+  const undoManager = yUndoPluginKey.getState(editor.state).undoManager;
+  undoManager.addToScope(entry.doc.getMap("strokes"));
+  undoManager.addTrackedOrigin("draw");
+  const draw = createDraw({ pageEl, pmEl, ydoc: entry.doc, provider: entry.provider, name, color: prof.color || "#111", canEdit: () => canEdit, onChange: syncDrawUi, undoManager });
+  const aiPanel = createAiPanel({ editor, entry, getCard: () => getCard(id) || c, container: view.querySelector(".ai-panel"), onEdited: () => draw.rerender(), draw, undo: () => editor.commands.undo() });
   const selMenu = createSelectionMenu({ editor, aiPanel, isDrawing: () => draw.isActive() });
 
   let mode = "text";
@@ -282,6 +285,17 @@ export function openCard(root, id) {
     const mod = e.metaKey || e.ctrlKey;
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
     if (mod && e.key.toLowerCase() === "j") { e.preventDefault(); aiPanel.toggle(); return; }
+    if (mod && e.key.toLowerCase() === "z" && canEdit) {
+      const el = document.activeElement;
+      const inPM = !!(el && el.closest && el.closest(".ProseMirror"));
+      const field = !!el && (/^(INPUT|SELECT)$/.test(el.tagName) || (el.tagName === "TEXTAREA" && !!el.value) || (el.isContentEditable && !inPM));
+      if (!inPM && !field) {
+        e.preventDefault();
+        if (e.shiftKey) editor.commands.redo(); else editor.commands.undo();
+        draw.rerender();
+        return;
+      }
+    }
     if (mod && (e.key.toLowerCase() === "d" || e.key.toLowerCase() === "e") && !e.shiftKey && canEdit) { e.preventDefault(); setMode(mode === "draw" ? "text" : "draw"); return; }
     if (e.key === "Escape") {
       if (aiPanel.isOpen() && document.activeElement?.closest(".ai-panel")) { aiPanel.toggle(false); editor.commands.focus(); return; }
@@ -291,7 +305,6 @@ export function openCard(root, id) {
     if (mode !== "draw") return;
     if (typing && !document.activeElement.closest(".draw-layer")) return;
     if (document.activeElement?.classList?.contains("draw-label-input")) return;
-    if (mod && e.key.toLowerCase() === "z") { e.preventDefault(); if (e.shiftKey) draw.redo(); else draw.undo(); return; }
     if (mod && e.key.toLowerCase() === "c") { e.preventDefault(); draw.copySelection(); return; }
     if (mod && e.key.toLowerCase() === "v") { e.preventDefault(); draw.paste(); return; }
     if (mod && e.key.toLowerCase() === "a") { e.preventDefault(); draw.setTool("lasso"); draw.selectAll(); return; }

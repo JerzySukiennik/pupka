@@ -46,7 +46,7 @@ export function applyEdits(editor, ops, bids) {
   return targets.length;
 }
 
-export function createAiPanel({ editor, entry, getCard, container, onEdited, draw }) {
+export function createAiPanel({ editor, entry, getCard, container, onEdited, draw, undo }) {
   const chat = entry.doc.getArray("chat");
   container.innerHTML = `
     <div class="ai-head">${icon("sparkle", 16)}<b>AI</b><span class="ai-sub">wspólny czat tej karty</span><button class="icon-btn ai-close" title="Zamknij (Cmd+J)">${icon("close", 16)}</button></div>
@@ -59,9 +59,11 @@ export function createAiPanel({ editor, entry, getCard, container, onEdited, dra
   const ta = form.querySelector("textarea");
   let busy = false;
   let liveEl = null;
+  let lastIdx = -1;
 
   function render() {
     const arr = chat.toArray();
+    lastIdx = arr.length - 1;
     msgs.innerHTML = arr.map((m, i) => msgHtml(m, i)).join("") || `<div class="ai-empty">Widzę całą tę kartę i mogę czytać inne. Mogę poprawić, dopisać, wyjaśnić albo znaleźć obrazek do tematu i wkleić go w dobre miejsce.<img class="watermark ai-wm" src="assets/gzowo-labs-fire.gif" alt="Gzowo Labs"></div>`;
     if (liveEl) msgs.appendChild(liveEl);
     msgs.scrollTop = msgs.scrollHeight;
@@ -70,12 +72,14 @@ export function createAiPanel({ editor, entry, getCard, container, onEdited, dra
     if (m.role === "user") return `<div class="msg user"><span class="who" style="color:${colorOf(m.name)}">${esc(m.name)}</span>${esc(m.text)}</div>`;
     const body = mdToHtml(m.text || "");
     const imgs = (m.images || []).map((im) => `<a href="${esc(im.url)}" target="_blank"><img src="${esc(im.url)}" alt=""></a>`).join("");
-    return `<div class="msg ai"><span class="who" style="color:${AI_COLOR}">AI${m.name ? " · dla " + esc(m.name) : ""}</span>${body}${imgs ? `<div class="ai-imgs">${imgs}</div>` : ""}${m.edited ? `<div class="ai-note">Zmieniłem kartę. Cmd+Z cofa.</div>` : ""}${m.text && m.text.trim() && !m.edited ? `<button class="ai-insert" data-i="${i}">Wstaw do notatki</button>` : ""}</div>`;
+    return `<div class="msg ai"><span class="who" style="color:${AI_COLOR}">AI${m.name ? " · dla " + esc(m.name) : ""}</span>${body}${imgs ? `<div class="ai-imgs">${imgs}</div>` : ""}${m.edited ? `<div class="ai-note">Zmieniłem kartę.${i === lastIdx ? ` <button class="ai-undo" type="button">Cofnij</button>` : ""}</div>` : ""}${m.text && m.text.trim() && !m.edited ? `<button class="ai-insert" data-i="${i}">Wstaw do notatki</button>` : ""}</div>`;
   }
   chat.observe(render);
   render();
 
   msgs.addEventListener("click", (e) => {
+    const u = e.target.closest(".ai-undo");
+    if (u) { u.disabled = true; u.textContent = "Cofnięto"; undo && undo(); draw && draw.rerender(); return; }
     const b = e.target.closest(".ai-insert");
     if (!b) return;
     const m = chat.get(+b.dataset.i);

@@ -62,9 +62,11 @@ function arrowHead(a, b, w) {
 }
 
 
-export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit, onChange }) {
+export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit, onChange, undoManager }) {
   const strokes = ydoc.getMap("strokes");
-  const undo = new Y.UndoManager(strokes, { trackedOrigins: new Set(["draw"]), captureTimeout: 0 });
+  const ownUndo = !undoManager;
+  const undo = undoManager || new Y.UndoManager(strokes, { trackedOrigins: new Set(["draw"]), captureTimeout: 0 });
+  const tx = (fn) => { undo.stopCapturing(); ydoc.transact(fn, "draw"); undo.stopCapturing(); };
   const layer = document.createElement("div");
   layer.className = "draw-layer";
   const svgStatic = svg("svg", { class: "strokes" });
@@ -161,7 +163,7 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     const { bid, top } = anchorFor(first[1]);
     const r = Object.assign({}, rec, { bid, fy: top, p: rec.p.map(([x, y]) => [Math.round(x * 10) / 10, Math.round((y - top) * 10) / 10]), by: name, ts: Date.now() });
     const id = uid();
-    ydoc.transact(() => strokes.set(id, r), "draw");
+    tx(() => strokes.set(id, r));
     return id;
   }
   function reanchor(absPoints, s) {
@@ -239,7 +241,7 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
   function clearSelection() { st.selection.clear(); drawSelection(); }
   function deleteSelection() {
     if (!st.selection.size) return;
-    ydoc.transact(() => { for (const id of st.selection) strokes.delete(id); }, "draw");
+    tx(() => { for (const id of st.selection) strokes.delete(id); });
     clearSelection();
   }
   function copySelection() {
@@ -249,26 +251,26 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
   function paste() {
     if (!st.clipboard || !st.clipboard.length) return;
     const ids = [];
-    ydoc.transact(() => {
+    tx(() => {
       for (const s of st.clipboard) {
         const moved = s.p.map(([x, y]) => [x + 24, y + 24]);
         const id = uid();
         strokes.set(id, Object.assign(reanchor(moved, s), { by: name, ts: Date.now() }));
         ids.push(id);
       }
-    }, "draw");
+    });
     st.clipboard = st.clipboard.map((s) => Object.assign({}, s, { p: s.p.map(([x, y]) => [x + 24, y + 24]) }));
     st.selection = new Set(ids);
     drawSelection();
   }
   function moveSelection(dx, dy) {
-    ydoc.transact(() => {
+    tx(() => {
       for (const id of st.selection) {
         const s = strokes.get(id);
         if (!s) continue;
         strokes.set(id, reanchor(absPts(s).map(([x, y]) => [x + dx, y + dy]), s));
       }
-    }, "draw");
+    });
   }
 
   function eraseAt(p) {
@@ -295,7 +297,7 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
       for (let i = 1; i < pts.length; i++) if (segDist(p, pts[i - 1], pts[i]) < r) { hit.push(id); return; }
       if (pts.length === 1 && dist(p, pts[0]) < r) hit.push(id);
     });
-    if (hit.length) ydoc.transact(() => hit.forEach((id) => strokes.delete(id)), "draw");
+    if (hit.length) tx(() => hit.forEach((id) => strokes.delete(id)));
   }
 
   let labelInput = null;
@@ -331,7 +333,7 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     if (existingId) {
       const s = strokes.get(existingId);
       if (!s) return;
-      ydoc.transact(() => { if (txt) strokes.set(existingId, Object.assign({}, s, { txt })); else strokes.delete(existingId); }, "draw");
+      tx(() => { if (txt) strokes.set(existingId, Object.assign({}, s, { txt })); else strokes.delete(existingId); });
     } else if (txt) commit({ t: "label", c: st.color, w: 16, p: [p], txt });
   }
   function labelAt(p) {
@@ -473,7 +475,7 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     setActive(v) { st.active = !!v; applyMode(); },
     isActive() { return st.active; },
     setTool(t) { st.tool = t; if (t !== "lasso") clearSelection(); applyMode(); },
-    setColor(c) { st.color = c; if (st.selection.size) { ydoc.transact(() => { for (const id of st.selection) { const s = strokes.get(id); if (s) strokes.set(id, Object.assign({}, s, { c })); } }, "draw"); } onChange && onChange(api.getState()); },
+    setColor(c) { st.color = c; if (st.selection.size) { tx(() => { for (const id of st.selection) { const s = strokes.get(id); if (s) strokes.set(id, Object.assign({}, s, { c })); } }); } onChange && onChange(api.getState()); },
     setSize(w) { st.size = w; onChange && onChange(api.getState()); },
     setSpace(v) { st.spaceDown = v; capture.style.pointerEvents = st.active && !v ? "auto" : "none"; },
     toggleGrid() { st.grid = !st.grid; localStorage.setItem("pupka-grid", st.grid ? "1" : "0"); pageEl.classList.toggle("grid", st.grid); onChange && onChange(api.getState()); },
@@ -488,7 +490,7 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     clearAll(author) {
       const ids = [];
       strokes.forEach((s, id) => { if (!author || s.by === author) ids.push(id); });
-      if (ids.length) ydoc.transact(() => ids.forEach((id) => strokes.delete(id)), "draw");
+      if (ids.length) tx(() => ids.forEach((id) => strokes.delete(id)));
       clearSelection();
       return ids.length;
     },
@@ -503,7 +505,7 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
       ro.disconnect();
       window.removeEventListener("resize", schedule);
       if (provider) { provider.awareness.off("change", renderRemote); provider.awareness.setLocalStateField("draft", null); }
-      undo.destroy();
+      if (ownUndo) undo.destroy();
       layer.remove();
     }
   };
