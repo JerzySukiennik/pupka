@@ -5,6 +5,7 @@ import { uploadImage, dataUrlToBlob } from "./net.js";
 import { topbar, avatarHtml, presenceHtml } from "./ui.js";
 import { icon } from "./icons.js";
 import { esc } from "./md.js";
+import { userWords, removeUserWord } from "./spell.js";
 
 const WEEKDAYS = ["niedziela", "poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota"];
 function go(hash) { location.hash = hash; }
@@ -258,8 +259,11 @@ export function renderSettings(root) {
       <label>Podpis odręczny do kartkówek</label>
       <div class="sig-box"><canvas class="sig" width="560" height="200"></canvas><div class="sig-actions"><button class="btn" data-sig="clear">Wyczyść</button><button class="btn primary" data-sig="save">Zapisz podpis</button>${p.signature ? `<img class="sig-preview" src="${esc(p.signature)}" alt="podpis">` : ""}</div></div>
     </section>
+    <section><div class="eyebrow">Słownik pisowni</div>
+      <p class="muted hint">Błędy podkreśla Pupka (czerwona falka). Kliknij podkreślone słowo, żeby wybrać poprawkę, dodać je do słownika albo zignorować. Nic nie poprawia się samo. Słowa dodane do słownika są wspólne dla was wszystkich.</p>
+      <div class="dict-words">${userWords().length ? userWords().map((w) => `<span class="dict-chip">${esc(w)}<button data-rmword="${esc(w)}" title="Usuń ze słownika">${icon("close", 12)}</button></span>`).join("") : `<span class="muted">Jeszcze nic nie dodaliście.</span>`}</div>
+    </section>
     <section><div class="eyebrow">Ten komputer</div>
-      <p class="muted hint">Błędy podkreśla przeglądarka, poprawkę wybierasz prawym klikiem na słowie. Jeśli nie podkreśla polskich słów: w Chrome lub Brave wejdź w Ustawienia → Języki → Sprawdzanie pisowni i włącz polski. W Safari działa słownik systemowy.</p>
       <button class="btn" data-go="#/switch">Zmień osobę</button>
     </section>
     <img class="watermark settings-wm" src="assets/gzowo-labs-fire.gif" alt="Gzowo Labs">
@@ -280,6 +284,7 @@ export function renderSettings(root) {
     if (av) { main.querySelector(".avatar-pick input").click(); return; }
     const b = e.target.closest("button");
     if (!b) return;
+    if (b.dataset.rmword) { removeUserWord(b.dataset.rmword); return; }
     if (b.classList.contains("upload-btn")) { main.querySelector(".avatar-pick input").click(); return; }
     if (b.classList.contains("remove-avatar")) { users.set(name, Object.assign({}, myProfile(), { avatar: null })); updatePresence(); renderSettings(root); return; }
     if (b.dataset.mycolor) { users.set(name, Object.assign({}, myProfile(), { color: b.dataset.mycolor })); updatePresence(); main.querySelectorAll("[data-mycolor]").forEach((x) => x.classList.toggle("on", x === b)); main.querySelector(".avatar-pick").style.setProperty("--c", b.dataset.mycolor); main.querySelector(".avatar-pick .avatar").style.setProperty("--c", b.dataset.mycolor); }

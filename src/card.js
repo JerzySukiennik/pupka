@@ -9,6 +9,7 @@ import { card as getCard, subject, me, myProfile, profileOf, openCardDoc, closeC
 import { docToPlain, esc } from "./md.js";
 import { topbar, avatarHtml, presenceHtml } from "./ui.js";
 import { icon } from "./icons.js";
+import { Spell } from "./spell.js";
 
 const PAGE_CONTENT_H = 971;
 
@@ -94,7 +95,7 @@ export function openCard(root, id) {
     element: editorEl,
     editable: canEdit,
     autofocus: canEdit ? "end" : false,
-    editorProps: { attributes: { spellcheck: "true", lang: "pl", class: "doc" }, transformPastedHTML: (html) => html.replace(/<img\b[^>]*>/gi, "") },
+    editorProps: { attributes: { spellcheck: "false", lang: "pl", class: "doc" }, transformPastedHTML: (html) => html.replace(/<img\b[^>]*>/gi, "") },
     extensions: [
       StarterKit.configure({ history: false, heading: { levels: [1, 2, 3] }, dropcursor: { color: prof.color || "#2f7cf6", width: 2 } }),
       Collaboration.configure({ document: entry.doc, field: "prosemirror" }),
@@ -103,7 +104,7 @@ export function openCard(root, id) {
       Table.configure({ resizable: false }), TableRow, TableCell, TableHeader,
       ResizableImage.configure({ inline: false, allowBase64: false }),
       Placeholder.configure({ placeholder: isTest ? "Pisz tutaj…" : "Pisz tutaj. Skróty: - lista, # nagłówek, !w ramka, $x^2$ wzór" }),
-      BlockId, MathNode, Callout, TestHeader, Spacer, Shortcuts
+      BlockId, MathNode, Callout, TestHeader, Spacer, Shortcuts, Spell
     ]
   });
   const pmEl = editorEl.querySelector(".ProseMirror");

@@ -1,0 +1,3 @@
+Polish spelling data used by Pupka's spell checker (pl.bloom, pl-freq.txt).
+pl.bloom: a Bloom filter built from the word forms of the Polish Hunspell dictionary of the Polish Native Lang Project (pl.openoffice.org), distributed in the npm package dictionary-pl, plus a few extra words.
+pl-freq.txt: ordering of the most frequent Polish words, derived from the FrequencyWords project by Hermit Dave (OpenSubtitles 2018 data), CC BY-SA 4.0: https://github.com/hermitdave/FrequencyWords

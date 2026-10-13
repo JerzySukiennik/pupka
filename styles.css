@@ -161,6 +161,10 @@ select { appearance: none; -webkit-appearance: none; padding-right: 26px; backgr
 canvas.sig { background: #fff; border-radius: var(--r); width: 100%; max-width: 560px; touch-action: none; cursor: crosshair; }
 .sig-actions { display: flex; gap: 8px; align-items: center; }
 .sig-preview { height: 44px; background: #fff; border-radius: 6px; padding: 4px; margin-left: 10px; }
+.dict-words { display: flex; flex-wrap: wrap; gap: 6px; }
+.dict-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 4px 3px 10px; border: 1px solid var(--line2); border-radius: 999px; font-size: 12.5px; }
+.dict-chip button { width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--fg3); }
+.dict-chip button:hover { background: var(--bg3); color: var(--fg); }
 .settings .hint { margin: 0; font-size: 12px; line-height: 1.55; max-width: 560px; }
 
 /* menus, modals, search */
@@ -299,6 +303,16 @@ canvas.sig { background: #fff; border-radius: var(--r); width: 100%; max-width: 
 .cam-stage video, .cam-stage .cam-shot { width: 100%; height: 100%; object-fit: contain; display: block; }
 .cam-msg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 20px; color: var(--fg2); font-size: 13px; background: rgba(0,0,0,.55); }
 
+.misspelled { text-decoration: underline wavy #e03131; text-decoration-thickness: 1.2px; text-underline-offset: 3px; text-decoration-skip-ink: none; }
+.spell-pop { position: fixed; z-index: 350; background: var(--bg3); border: 1px solid var(--line2); border-radius: 10px; padding: 4px; min-width: 190px; max-width: 280px; box-shadow: 0 14px 36px rgba(0,0,0,.5); display: flex; flex-direction: column; font-size: 13px; }
+.spell-pop .sp-word { padding: 6px 10px 4px; color: var(--fg3); font-size: 11.5px; letter-spacing: .02em; }
+.spell-pop .sp-opt, .spell-pop .sp-act { text-align: left; padding: 7px 10px; border-radius: 6px; color: var(--fg); }
+.spell-pop .sp-opt { font-weight: 600; font-family: var(--display); }
+.spell-pop .sp-act { color: var(--fg2); font-size: 12.5px; }
+.spell-pop .sp-opt:hover, .spell-pop .sp-act:hover { background: var(--bg4); color: var(--fg); }
+.spell-pop .sp-none { padding: 6px 10px; color: var(--fg3); }
+.spell-pop .sp-sep { height: 1px; background: var(--line2); margin: 4px 2px; }
+
 /* collaboration cursors */
 .collaboration-cursor__caret { position: relative; margin-left: -1px; margin-right: -1px; border-left: 1px solid; border-right: 1px solid; word-break: normal; pointer-events: none; }
 .collaboration-cursor__label { position: absolute; top: -1.45em; left: -1px; font-size: 10px; font-family: var(--ui); font-weight: 600; line-height: normal; user-select: none; color: #fff; padding: 1px 5px; border-radius: 4px 4px 4px 0; white-space: nowrap; pointer-events: none; }
@@ -414,4 +428,5 @@ body.hide-cursors .collaboration-cursor__selection { background: transparent !im
   .img-figure.selected img, .img-figure img { outline: 0 !important; cursor: auto; }
   .img-figure figcaption:empty { display: none; }
   .draw-spacer { outline: 0 !important; }
+  .misspelled { text-decoration: none !important; }
 }

@@ -22,6 +22,7 @@ export { default as TextAlign } from "@tiptap/extension-text-align";
 export { ySyncPluginKey, yUndoPluginKey } from "y-prosemirror";
 export { Plugin, PluginKey, TextSelection, NodeSelection } from "@tiptap/pm/state";
 export { Fragment, Slice, DOMParser as PMDOMParser } from "@tiptap/pm/model";
+export { Decoration, DecorationSet } from "@tiptap/pm/view";
 export { getStroke } from "perfect-freehand";
 export { default as katex } from "katex";
 export { ArrowLeft, Search, CalendarDays, Trash2, SlidersHorizontal, Undo2, Redo2, List, ListOrdered, Quote, Table as TableIcon, Image as ImageIcon, Sigma, Frame, Signature, Pencil, Highlighter, Eraser, Lasso, Slash, MoveUpRight, Square, Circle, Type, Grip, Eye, EyeOff, SeparatorHorizontal, Printer, Sparkles, SendHorizontal, X, Plus, Ellipsis, ChevronDown, RotateCcw, Check, WifiOff, PenLine, AlignLeft, AlignCenter, AlignRight, Move, Camera } from "lucide";
