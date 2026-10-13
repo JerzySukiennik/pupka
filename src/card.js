@@ -353,6 +353,7 @@ export function openCard(root, id) {
   }
   editor.on("update", ({ transaction }) => { if (transaction.docChanged) syncTitle(); });
   editor.on("transaction", updateToolbarState);
+  editor.on("update", () => draw.rerender());
   function updateToolbarState() {
     const map = { bold: "bold", italic: "italic", underline: "underline", strike: "strike", superscript: "superscript", subscript: "subscript", bulletList: "bulletList", orderedList: "orderedList", blockquote: "blockquote", table: "table", callout: "callout" };
     for (const k in map) { const b = view.querySelector(`[data-cmd="${k}"]`); if (b) b.classList.toggle("on", editor.isActive(map[k])); }

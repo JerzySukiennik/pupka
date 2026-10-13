@@ -313,7 +313,7 @@ export const ResizableImage = Image.extend({
         const maxW = Math.max(120, pmRect().width - (cur.attrs.align === "free" ? (cur.attrs.fx || 0) : 0));
         const dir = cur.attrs.align === "right" ? -1 : 1;
         let w = startW;
-        const move = (ev) => { w = Math.max(60, Math.min(maxW, startW + (ev.clientX - startX) * dir)); img.style.width = w + "px"; };
+        const move = (ev) => { w = Math.max(60, Math.min(maxW, startW + (ev.clientX - startX) * dir)); img.style.width = w + "px"; dom.dispatchEvent(new CustomEvent("pupka-img", { bubbles: true })); };
         const up = () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); setAttrs({ width: Math.round(w) }); };
         window.addEventListener("pointermove", move);
         window.addEventListener("pointerup", up);

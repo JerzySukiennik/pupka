@@ -101,11 +101,20 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
   let tops = new Map();
   let raf = 0;
 
+  let imgs = new Map();
   function layout() {
     tops = new Map();
     for (const el of pmEl.children) if (el.dataset && el.dataset.bid) tops.set(el.dataset.bid, el.offsetTop);
+    imgs = new Map();
+    const pr = pmEl.getBoundingClientRect();
+    pmEl.querySelectorAll(".img-figure").forEach((fig) => {
+      const im = fig.querySelector("img");
+      if (!im || !fig.dataset.bid) return;
+      const r = im.getBoundingClientRect();
+      imgs.set(fig.dataset.bid, { left: r.left - pr.left, top: r.top - pr.top, w: r.width, h: r.height });
+    });
     let lowest = 0;
-    strokes.forEach((s) => { const t = topOf(s); for (const pt of s.p) lowest = Math.max(lowest, t + pt[1] + (s.t === "label" ? 8 : (s.w || 4) * 2)); });
+    strokes.forEach((s) => { for (const pt of absPts(s)) lowest = Math.max(lowest, pt[1] + (s.t === "label" ? 8 : (s.w || 4) * 2)); });
     let contentBottom = 0;
     for (const el of pmEl.children) contentBottom = Math.max(contentBottom, el.offsetTop + el.offsetHeight);
     pmEl.style.setProperty("--draw-extra", Math.max(0, Math.round(lowest + 24 - contentBottom)) + "px");
@@ -117,7 +126,29 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     if (best == null) return { bid: null, top: 0 };
     return { bid: best, top: bestTop };
   }
-  function absPts(s) { const t = topOf(s); return s.p.map(([x, y]) => [x, y + t]); }
+  function frame(s) {
+    if (s.a) {
+      const im = imgs.get(s.a);
+      if (!im || im.w < 2) return null;
+      return { ox: im.left, oy: im.top, k: s.aw ? im.w / s.aw : 1 };
+    }
+    return { ox: 0, oy: topOf(s), k: 1 };
+  }
+  function absPts(s) { const f = frame(s); if (!f) return []; return s.p.map(([x, y]) => [f.ox + x * f.k, f.oy + y * f.k]); }
+  function imageAt(pt) {
+    let hit = null;
+    for (const [bid, r] of imgs) if (r.w > 20 && pt[0] >= r.left && pt[0] <= r.left + r.w && pt[1] >= r.top && pt[1] <= r.top + r.h) hit = { bid, r };
+    return hit;
+  }
+  const r1 = (v) => Math.round(v * 10) / 10;
+  function record(absPoints, base) {
+    const b = Object.assign({}, base);
+    delete b.a; delete b.aw; delete b.bid; delete b.fy;
+    const hit = imageAt(absPoints[0]);
+    if (hit) return Object.assign(b, { a: hit.bid, aw: r1(hit.r.w), p: absPoints.map(([x, y]) => [r1(x - hit.r.left), r1(y - hit.r.top)]) });
+    const { bid, top } = anchorFor(absPoints[0][1]);
+    return Object.assign(b, { bid, fy: top, p: absPoints.map(([x, y]) => [r1(x), r1(y - top)]) });
+  }
 
   function build(id, s) {
     const g = svg("g", { "data-id": id });
@@ -147,8 +178,9 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
   function place(id) {
     const e = els.get(id);
     if (!e) return;
-    e.g.setAttribute("transform", `translate(0,${topOf(e.s)})`);
-    e.g.style.display = e.s.sp && !tops.has(e.s.bid) ? "none" : "";
+    const f = frame(e.s);
+    e.g.setAttribute("transform", f ? `translate(${r1(f.ox)},${r1(f.oy)})${f.k !== 1 ? ` scale(${f.k})` : ""}` : "");
+    e.g.style.display = !f || (e.s.sp && !tops.has(e.s.bid)) ? "none" : "";
     e.g.classList.toggle("selected", st.selection.has(id));
   }
   function renderAll() {
@@ -166,9 +198,29 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     raf = requestAnimationFrame(run);
     setTimeout(() => { if (raf) { cancelAnimationFrame(raf); run(); } }, 120);
   }
-  strokes.observe(() => schedule());
+  let migTimer = 0;
+  strokes.observe(() => { schedule(); clearTimeout(migTimer); migTimer = setTimeout(() => { try { migrateLegacy(); } catch (e) { /* not ready */ } }, 500); });
   const ro = new ResizeObserver(() => schedule());
   ro.observe(pmEl);
+  const migrated = new Set();
+  function migrateLegacy() {
+    if (!canEdit()) return;
+    const todo = [];
+    strokes.forEach((s, id) => {
+      if (s.a || !s.bid || migrated.has(id) || !imgs.has(s.bid)) return;
+      const ap = absPts(s);
+      if (!ap.length) return;
+      const hit = imageAt(ap[0]);
+      if (hit && hit.bid === s.bid) todo.push([id, reanchor(ap, s)]);
+    });
+    if (!todo.length) return;
+    todo.forEach(([id]) => migrated.add(id));
+    ydoc.transact(() => todo.forEach(([id, r]) => strokes.set(id, r)), "migrate");
+  }
+  const onImg = () => { layout(); renderAll(); };
+  pmEl.addEventListener("pupka-img", onImg);
+  pmEl.addEventListener("load", () => { schedule(); setTimeout(migrateLegacy, 400); }, true);
+  setTimeout(() => { layout(); migrateLegacy(); }, 1500);
   window.addEventListener("resize", schedule);
   schedule();
 
@@ -177,17 +229,12 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     return [Math.round((e.clientX - r.left) * 10) / 10, Math.round((e.clientY - r.top) * 10) / 10];
   }
   function commit(rec) {
-    const first = rec.p[0];
-    const { bid, top } = anchorFor(first[1]);
-    const r = Object.assign({}, rec, { bid, fy: top, p: rec.p.map(([x, y]) => [Math.round(x * 10) / 10, Math.round((y - top) * 10) / 10]), by: name, ts: Date.now() });
+    const r = Object.assign(record(rec.p, rec), { by: name, ts: Date.now() });
     const id = uid();
     tx(() => strokes.set(id, r));
     return id;
   }
-  function reanchor(absPoints, s) {
-    const { bid, top } = anchorFor(absPoints[0][1]);
-    return Object.assign({}, s, { bid, fy: top, p: absPoints.map(([x, y]) => [Math.round(x * 10) / 10, Math.round((y - top) * 10) / 10]) });
-  }
+  function reanchor(absPoints, s) { return record(absPoints, s); }
 
   let liveEl = null;
   let draftTimer = 0;
@@ -242,6 +289,8 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
       const s = strokes.get(id);
       if (!s) continue;
       const pts = absPts(s);
+      if (!pts.length) continue;
+      if (!pts.length) return;
       const bb = s.t === "label" ? { x0: pts[0][0], y0: pts[0][1] - (s.w || 16), x1: pts[0][0] + String(s.txt || "").length * (s.w || 16) * 0.55, y1: pts[0][1] + 4 } : bbox(pts);
       const pad = s.t === "hl" ? (s.w || 4) * 2 : (s.w || 4);
       b = { x0: Math.min(b.x0, bb.x0 - pad), y0: Math.min(b.y0, bb.y0 - pad), x1: Math.max(b.x1, bb.x1 + pad), y1: Math.max(b.y1, bb.y1 + pad) };
@@ -264,7 +313,7 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
   }
   function copySelection() {
     if (!st.selection.size) return;
-    st.clipboard = Array.from(st.selection).map((id) => { const s = strokes.get(id); return Object.assign({}, s, { p: absPts(s) }); });
+    st.clipboard = Array.from(st.selection).map((id) => { const s = strokes.get(id); return s ? Object.assign({}, s, { p: absPts(s) }) : null; }).filter((x) => x && x.p.length);
   }
   function paste() {
     if (!st.clipboard || !st.clipboard.length) return;
@@ -286,7 +335,9 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
       for (const id of st.selection) {
         const s = strokes.get(id);
         if (!s) continue;
-        strokes.set(id, reanchor(absPts(s).map(([x, y]) => [x + dx, y + dy]), s));
+        const ap = absPts(s);
+        if (!ap.length) continue;
+        strokes.set(id, reanchor(ap.map(([x, y]) => [x + dx, y + dy]), s));
       }
     });
   }
@@ -361,7 +412,9 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     let found = null;
     strokes.forEach((s, id) => {
       if (s.t !== "label") return;
-      const [x, y] = absPts(s)[0];
+      const ap = absPts(s);
+      if (!ap.length) return;
+      const [x, y] = ap[0];
       const w = String(s.txt || "").split("\n").reduce((m, l) => Math.max(m, l.length), 0) * (s.w || 16) * 0.6;
       const h = (s.w || 16) * 1.3 * String(s.txt || "").split("\n").length;
       if (p[0] >= x - 4 && p[0] <= x + w + 4 && p[1] >= y - (s.w || 16) && p[1] <= y - (s.w || 16) + h + 4) found = id;
@@ -411,7 +464,7 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
       const p = toLocal(e);
       const dx = p[0] - d.last[0], dy = p[1] - d.last[1];
       d.last = p; d.dx += dx; d.dy += dy;
-      for (const id of st.selection) { const el = els.get(id); if (el) el.g.setAttribute("transform", `translate(${d.dx},${topOf(el.s) + d.dy})`); }
+      for (const id of st.selection) { const el = els.get(id); const f = el && frame(el.s); if (f) el.g.setAttribute("transform", `translate(${r1(f.ox + d.dx)},${r1(f.oy + d.dy)})${f.k !== 1 ? ` scale(${f.k})` : ""}`); }
       if (selBox) selBox.setAttribute("transform", `translate(${d.dx},${d.dy})`);
       return;
     }
@@ -445,6 +498,7 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
       const poly = d.pts;
       strokes.forEach((s, id) => {
         const pts = absPts(s);
+        if (!pts.length) return;
         let test = pts;
         if (s.t === "rect" || s.t === "ellipse") { const [a, b] = pts; test = [a, [b[0], a[1]], b, [a[0], b[1]], [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2]]; }
         const inside = test.filter((p) => inPoly(p, poly)).length;
@@ -548,6 +602,8 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     relayout() { layout(); renderAll(); },
     destroy() {
       ro.disconnect();
+      clearTimeout(migTimer);
+      pmEl.removeEventListener("pupka-img", onImg);
       window.removeEventListener("resize", schedule);
       if (provider) { provider.awareness.off("change", renderRemote); provider.awareness.setLocalStateField("draft", null); }
       if (ownUndo) undo.destroy();
