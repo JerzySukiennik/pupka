@@ -181,11 +181,78 @@ export class Room {
     return out.join("\n");
   }
 
+  /* Concierge edits: applied as one Yjs transaction, so every connected client sees them live and Cmd+Z-style undo stays per client. */
+  applyOps(body) {
+    const frag = this.doc.getXmlFragment("prosemirror");
+    const results = [];
+    this.doc.transact(() => {
+      for (const op of body.ops || []) {
+        if (op.op === "append") {
+          const blocks = (op.blocks || []).map(makeBlock).filter(Boolean);
+          if (!blocks.length) throw new Error("brak treści do dopisania");
+          let at = frag.length;
+          if (Number.isInteger(op.after)) at = Math.min(Math.max(op.after, 0), frag.length);
+          else if (frag.length && isEmptyParagraph(frag.get(frag.length - 1))) at = frag.length - 1;
+          frag.insert(at, blocks);
+          results.push({ op: "append", blocks: blocks.length });
+        } else if (op.op === "replace") {
+          if (!op.find) throw new Error("replace: brak tekstu do znalezienia");
+          let n = 0;
+          const scope = Number.isInteger(op.block) ? [frag.get(op.block - 1)].filter(Boolean) : frag.toArray();
+          for (const node of scope) n += replaceIn(node, String(op.find), String(op.replace ?? ""), !!op.all);
+          results.push({ op: "replace", replaced: n });
+          if (!n) throw new Error("nie znalazłem tego tekstu w karcie");
+        } else if (op.op === "delete_block") {
+          const i = Number(op.block) - 1;
+          if (!Number.isInteger(i) || i < 0 || i >= frag.length) throw new Error("delete_block: nie ma takiego bloku");
+          frag.delete(i, 1);
+          results.push({ op: "delete_block", block: i + 1 });
+        } else throw new Error("nieznana operacja " + op.op);
+      }
+    }, "concierge");
+    return { ok: true, results, text: this.textOf() };
+  }
+
+  indexOp(body) {
+    const cards = this.doc.getMap("cards");
+    const subjects = this.doc.getMap("subjects");
+    if (body.op === "create_card") {
+      const sub = subjects.get(body.subject);
+      if (!sub || sub.deleted) throw new Error("nie ma takiego przedmiotu");
+      const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+      const date = /^\d{4}-\d{2}-\d{2}$/.test(body.date || "") ? body.date : new Date().toISOString().slice(0, 10);
+      cards.set(id, { created: Date.now(), updated: Date.now(), by: "Concierge", title: String(body.title || "").slice(0, 120), subject: body.subject, kind: "lesson", date });
+      return { ok: true, id };
+    }
+    if (body.op === "trash_card") {
+      const c = cards.get(body.card);
+      if (!c) throw new Error("nie ma takiej karty");
+      cards.set(body.card, Object.assign({}, c, { deleted: Date.now() }));
+      return { ok: true };
+    }
+    if (body.op === "touch_card") {
+      const c = cards.get(body.card);
+      if (c) cards.set(body.card, Object.assign({}, c, { updated: Date.now(), title: body.title != null ? String(body.title).slice(0, 120) : c.title }));
+      return { ok: true };
+    }
+    throw new Error("nieznana operacja");
+  }
+
   async fetch(req) {
     const url = new URL(req.url);
     if (url.pathname === "/ws") {
       if (req.headers.get("upgrade") !== "websocket") return new Response("expected websocket", { status: 426 });
       return this.openSocket();
+    }
+    if (url.pathname === "/edit" && req.method === "POST") {
+      let body; try { body = await req.json(); } catch (e) { return new Response(JSON.stringify({ error: "bad json" }), { status: 400 }); }
+      try { return new Response(JSON.stringify(this.applyOps(body)), { headers: { "content-type": "application/json" } }); }
+      catch (e) { return new Response(JSON.stringify({ error: String(e.message || e) }), { status: 400, headers: { "content-type": "application/json" } }); }
+    }
+    if (url.pathname === "/index_edit" && req.method === "POST") {
+      let body; try { body = await req.json(); } catch (e) { return new Response(JSON.stringify({ error: "bad json" }), { status: 400 }); }
+      try { return new Response(JSON.stringify(this.indexOp(body)), { headers: { "content-type": "application/json" } }); }
+      catch (e) { return new Response(JSON.stringify({ error: String(e.message || e) }), { status: 400, headers: { "content-type": "application/json" } }); }
     }
     if (url.pathname === "/text") return new Response(this.textOf(), { headers: { "content-type": "text/plain; charset=utf-8" } });
     if (url.pathname === "/json") {
@@ -202,6 +269,60 @@ export class Room {
     }
     return new Response("not found", { status: 404 });
   }
+}
+
+function xmlText(text) {
+  const t = new Y.XmlText();
+  t.insert(0, String(text));
+  return t;
+}
+function makeBlock(b) {
+  const text = String((b && b.text) || "");
+  if (b && b.type === "heading") {
+    const h = new Y.XmlElement("heading");
+    h.setAttribute("level", Math.min(Math.max(Number(b.level) || 2, 1), 3));
+    if (text) h.insert(0, [xmlText(text)]);
+    return h;
+  }
+  if (b && (b.type === "bullet" || b.type === "ordered")) {
+    const list = new Y.XmlElement(b.type === "ordered" ? "orderedList" : "bulletList");
+    for (const line of (Array.isArray(b.items) && b.items.length ? b.items : [text])) {
+      const li = new Y.XmlElement("listItem");
+      const p = new Y.XmlElement("paragraph");
+      if (line) p.insert(0, [xmlText(line)]);
+      li.insert(0, [p]);
+      list.insert(list.length, [li]);
+    }
+    return list;
+  }
+  const p = new Y.XmlElement("paragraph");
+  if (text) p.insert(0, [xmlText(text)]);
+  return p;
+}
+function isEmptyParagraph(node) {
+  return node && node.nodeName === "paragraph" && node.length === 0;
+}
+function replaceIn(node, find, repl, all) {
+  let count = 0;
+  if (node instanceof Y.XmlText) {
+    for (;;) {
+      const delta = node.toDelta();
+      let plain = "", offsets = [];
+      for (const d of delta) { offsets.push(plain.length); plain += typeof d.insert === "string" ? d.insert : "\uFFFC"; }
+      const at = plain.indexOf(find);
+      if (at < 0) break;
+      let attrs;
+      let acc = 0;
+      for (const d of delta) { const len = typeof d.insert === "string" ? d.insert.length : 1; if (at < acc + len) { attrs = d.attributes; break; } acc += len; }
+      node.delete(at, find.length);
+      if (repl) node.insert(at, repl, attrs);
+      count++;
+      if (!all) break;
+    }
+    return count;
+  }
+  if (node.toArray) for (const child of node.toArray()) { count += replaceIn(child, find, repl, all); if (count && !all) break; }
+  return count;
 }
 
 function decode(s) {

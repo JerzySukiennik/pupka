@@ -3,7 +3,7 @@
 import { Y, WebsocketProvider, IndexeddbPersistence } from "../lib/vendor.js";
 import { WS } from "./net.js";
 
-export const EPOCH = 2;
+export const EPOCH = 3;
 export const INDEX_ROOM = EPOCH > 1 ? `index-e${EPOCH}` : "index";
 export const NAMES = ["Jurek", "Janek", "Jaś"];
 export const CLASS = "8K";

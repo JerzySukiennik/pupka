@@ -3,6 +3,7 @@
 import { Room } from "./room.mjs";
 import { Media } from "./media.mjs";
 import { chat, rewrite, spent } from "./ai.mjs";
+import { concierge } from "./concierge.mjs";
 
 export { Room, Media };
 
@@ -30,6 +31,8 @@ export default {
     const url = new URL(req.url);
     const path = url.pathname.replace(/\/+$/, "");
     if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors(req) });
+
+    if (path.startsWith("/concierge/")) return concierge(req, env, path.slice(11));
 
     if (path.startsWith("/ws/")) {
       const id = roomId(path.slice(4));
