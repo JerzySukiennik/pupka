@@ -287,6 +287,7 @@ canvas.sig { background: #fff; border-radius: var(--r); width: 100%; max-width: 
 .img-figure.selected .img-handle { display: block; }
 .ProseMirror[contenteditable="false"] .img-handle, .ProseMirror[contenteditable="false"] .img-bar { display: none !important; }
 
+.print-copy { display: none; }
 .draw-spacer { margin: .3em 0; border-radius: 6px; }
 .draw-spacer:hover, .draw-spacer.selected { outline: 1px dashed #c3c6ce; }
 
@@ -395,7 +396,7 @@ body.hide-cursors .collaboration-cursor__selection { background: transparent !im
 @media print {
   html, body { background: #fff; height: auto; }
   body { color: #000; }
-  .topbar, .toolbar, .ai-panel, .readonly-note, .live, .draw-capture, .page-breaks, .img-handle, .img-bar, .sel-menu, .math-pop, .toast, .collaboration-cursor__caret, .collaboration-cursor__label, .watermark { display: none !important; }
+  .topbar, .toolbar, .ai-panel, .readonly-note, .draw-layer, .page-breaks, .img-handle, .img-bar, .sel-menu, .math-pop, .toast, .collaboration-cursor__caret, .collaboration-cursor__label, .watermark { display: none !important; }
   .collaboration-cursor__selection { background: transparent !important; }
   .card-view { height: auto; display: block; }
   .card-body { display: block; }
@@ -404,9 +405,13 @@ body.hide-cursors .collaboration-cursor__selection { background: transparent !im
   .page.grid .editor { background: none; }
   .page-head { display: block !important; position: static; text-align: right; margin-bottom: 6mm; color: #555; }
   .ProseMirror { min-height: 0; padding-bottom: var(--draw-extra, 0px); }
+  .editor > .print-copy { display: block; }
+  .editor > .print-copy + .ProseMirror { display: none !important; }
   .ProseMirror p.is-editor-empty:first-child::before { display: none; }
   .ProseMirror img, .img-figure, table, .callout, .test-header { break-inside: avoid; }
   .callout { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .draw-layer { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .print-strokes { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
+  .img-figure.selected img, .img-figure img { outline: 0 !important; cursor: auto; }
+  .img-figure figcaption:empty { display: none; }
   .draw-spacer { outline: 0 !important; }
 }

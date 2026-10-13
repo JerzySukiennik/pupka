@@ -236,6 +236,10 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
   }
   function reanchor(absPoints, s) { return record(absPoints, s); }
 
+  function printCleanup() {
+    (pmEl.parentElement || pageEl).querySelectorAll(":scope > .print-copy").forEach((n) => n.remove());
+  }
+
   let liveEl = null;
   let draftTimer = 0;
   function broadcastDraft(d, force) {
@@ -600,6 +604,36 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     },
     rerender: schedule,
     relayout() { layout(); renderAll(); },
+    printPrepare() {
+      printCleanup();
+      layout();
+      const copy = pmEl.cloneNode(true);
+      copy.classList.add("print-copy");
+      copy.removeAttribute("contenteditable");
+      copy.setAttribute("aria-hidden", "true");
+      pmEl.parentElement.insertBefore(copy, pmEl);
+      const hosts = new Map();
+      const hostFor = (s) => {
+        if (s.a) { const fig = copy.querySelector('.img-figure[data-bid="' + s.a + '"]'); return fig && fig.querySelector(".img-box"); }
+        if (s.bid) return copy.querySelector('[data-bid="' + s.bid + '"]');
+        return copy;
+      };
+      strokes.forEach((s, id) => {
+        const f = frame(s);
+        const host = f && hostFor(s);
+        if (!host || (s.sp && !tops.has(s.bid))) return;
+        if (!hosts.has(host)) hosts.set(host, []);
+        hosts.get(host).push({ id, s, k: s.a ? f.k : 1 });
+      });
+      hosts.forEach((list, host) => {
+        if (getComputedStyle(host).position === "static") host.style.position = "relative";
+        const sv = svg("svg", { class: "print-strokes", width: 1, height: 1 });
+        sv.style.cssText = "position:absolute;left:0;top:0;overflow:visible;pointer-events:none;z-index:4";
+        for (const it of list) { const g = build(it.id, it.s); if (it.k !== 1) g.setAttribute("transform", "scale(" + it.k + ")"); sv.appendChild(g); }
+        host.appendChild(sv);
+      });
+    },
+    printCleanup,
     destroy() {
       ro.disconnect();
       clearTimeout(migTimer);

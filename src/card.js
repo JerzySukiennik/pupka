@@ -412,8 +412,10 @@ export function openCard(root, id) {
     else if (["1", "2", "3"].includes(k)) draw.setSize(SIZES[+k - 1]);
   }
   function onKeyUp(e) { if (e.key === " ") draw.setSpace(false); }
-  const onBeforePrint = () => draw.relayout();
+  const onBeforePrint = () => draw.printPrepare();
+  const onAfterPrint = () => draw.printCleanup();
   window.addEventListener("beforeprint", onBeforePrint);
+  window.addEventListener("afterprint", onAfterPrint);
   document.addEventListener("keydown", onKey);
   document.addEventListener("keyup", onKeyUp);
 
@@ -436,6 +438,8 @@ export function openCard(root, id) {
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("beforeprint", onBeforePrint);
+      window.removeEventListener("afterprint", onAfterPrint);
+      draw.printCleanup();
       pmEl.removeEventListener("paste", onPaste, true);
       document.removeEventListener("click", closeDd);
       entry.provider.awareness.off("change", renderPresence);
