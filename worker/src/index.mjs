@@ -1,7 +1,7 @@
 /* Pupka API: Yjs rooms (Durable Objects), media in R2, AI proxy. */
 
 import { Room } from "./room.mjs";
-import { Media } from "./media.mjs";
+import { Media, MAX_TOTAL } from "./media.mjs";
 import { chat, rewrite, spent } from "./ai.mjs";
 import { concierge } from "./concierge.mjs";
 
@@ -10,7 +10,7 @@ export { Room, Media };
 export function mediaStub(env) { return env.MEDIA.get(env.MEDIA.idFromName("media")); }
 
 const ORIGINS = [/^https:\/\/([a-z0-9-]+\.)?gzowo\.fun$/, /^https:\/\/[a-z0-9-]+\.github\.io$/, /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/];
-const MAX_MEDIA = 1_900_000;
+const MAX_MEDIA = MAX_TOTAL;
 
 function cors(req) {
   const o = req.headers.get("origin") || "";
@@ -47,14 +47,15 @@ export default {
       return new Response(r.body, { status: r.status, headers: Object.assign({ "content-type": r.headers.get("content-type") || "text/plain" }, cors(req)) });
     }
 
-    if (path.startsWith("/media/")) {
+    if (path.startsWith("/media/") && path !== "/media/import") {
       if (req.method !== "GET") return json(req, { error: "GET only" }, 405);
       const cache = caches.default;
       const hit = await cache.match(req);
       if (hit) return hit;
       const r = await mediaStub(env).fetch("https://media/" + path.slice(7));
       if (!r.ok) return new Response("not found", { status: 404, headers: cors(req) });
-      const h = new Headers(cors(req));
+      const h = new Headers();
+      h.set("access-control-allow-origin", "*");
       h.set("content-type", r.headers.get("content-type") || "application/octet-stream");
       h.set("cache-control", "public, max-age=31536000, immutable");
       const res = new Response(await r.arrayBuffer(), { headers: h });
@@ -64,19 +65,39 @@ export default {
     if (path === "/media-stats") {
       return new Response((await mediaStub(env).fetch("https://media/_stats")).body, { headers: Object.assign({ "content-type": "application/json" }, cors(req)) });
     }
+    if (path === "/media/import") {
+      if (req.method !== "POST") return json(req, { error: "POST only" }, 405);
+      const o = req.headers.get("origin") || "";
+      if (o && !ORIGINS.some((r) => r.test(o))) return json(req, { error: "origin not allowed" }, 403);
+      let target;
+      try { target = new URL(String((await req.json()).url || "")); } catch (e) { return json(req, { error: "bad url" }, 400); }
+      if (!/^https?:$/.test(target.protocol) || /^(localhost|127\.|10\.|192\.168\.|169\.254\.|0\.)/i.test(target.hostname) || !target.hostname.includes(".")) return json(req, { error: "bad url" }, 400);
+      let r;
+      try { r = await fetch(target.toString(), { headers: { "user-agent": "Mozilla/5.0 (Pupka school notebook)", accept: "image/*" }, redirect: "follow", signal: AbortSignal.timeout(12000) }); } catch (e) { return json(req, { error: "Nie udało się pobrać obrazka z tego adresu." }, 502); }
+      const ct = (r.headers.get("content-type") || "").split(";")[0].trim();
+      if (!r.ok || !/^image\/(jpeg|png|webp|gif)$/.test(ct)) return json(req, { error: "To nie jest zwykły obrazek (jpg, png, webp lub gif)." }, 415);
+      const buf = await r.arrayBuffer();
+      if (buf.byteLength < 200) return json(req, { error: "Obrazek jest pusty." }, 415);
+      if (buf.byteLength > MAX_MEDIA) return json(req, { error: "Obrazek jest za duży (max 14 MB)." }, 413);
+      const ext = ct.split("/")[1].replace("jpeg", "jpg");
+      const key = `u/web/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+      const put = await mediaStub(env).fetch("https://media/" + key, { method: "PUT", headers: { "content-type": ct }, body: buf });
+      if (!put.ok) return json(req, { error: "Nie udało się zapisać obrazka." }, 413);
+      return json(req, { url: `${url.origin}/media/${key}`, type: ct, bytes: buf.byteLength });
+    }
     if (path === "/media") {
       if (req.method !== "POST") return json(req, { error: "POST only" }, 405);
       const ct = (req.headers.get("content-type") || "").split(";")[0];
       if (!/^image\/(jpeg|png|webp|gif)$/.test(ct)) return json(req, { error: "only images" }, 415);
       const len = parseInt(req.headers.get("content-length") || "0", 10);
-      if (len > MAX_MEDIA) return json(req, { error: "too large" }, 413);
+      if (len > MAX_MEDIA) return json(req, { error: "Plik jest za duży (max 14 MB)." }, 413);
       const buf = await req.arrayBuffer();
-      if (buf.byteLength > MAX_MEDIA) return json(req, { error: "too large" }, 413);
+      if (buf.byteLength > MAX_MEDIA) return json(req, { error: "Plik jest za duży (max 14 MB)." }, 413);
       const ext = ct.split("/")[1].replace("jpeg", "jpg");
       const who = (req.headers.get("x-pupka-name") || "x").replace(/[^a-z]/gi, "").slice(0, 12).toLowerCase() || "x";
       const key = `u/${who}/${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
       const put = await mediaStub(env).fetch("https://media/" + key, { method: "PUT", headers: { "content-type": ct }, body: buf });
-      if (!put.ok) return json(req, { error: "too large" }, 413);
+      if (!put.ok) return json(req, { error: "Nie udało się zapisać pliku." }, 413);
       return json(req, { url: `${url.origin}/media/${key}` });
     }
 

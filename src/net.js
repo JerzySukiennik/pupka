@@ -1,8 +1,7 @@
 /* Network helpers: API base, image upload with client-side downscale, AI streaming. */
 
 const LOCAL = ["localhost", "127.0.0.1"].includes(location.hostname);
-if (LOCAL && new URLSearchParams(location.search).get("api") === "local") sessionStorage.setItem("pupka-api", "http://127.0.0.1:8787");
-export const API = (LOCAL && sessionStorage.getItem("pupka-api")) || "https://pupka-api.kalakasanyt.workers.dev";
+export const API = LOCAL ? "http://127.0.0.1:8787" : "https://pupka-api.kalakasanyt.workers.dev";
 export const WS = API.replace(/^http/, "ws") + "/ws";
 
 export function shrinkImage(file, max = 1600, quality = 0.86) {
@@ -28,14 +27,29 @@ export function shrinkImage(file, max = 1600, quality = 0.86) {
   });
 }
 
+export const MAX_UPLOAD = 14_000_000;
+
 export async function uploadImage(file, who, max = 1600) {
   let blob = file;
-  const keepGif = file.type === "image/gif" && file.size <= 1_800_000;
-  if (!keepGif && (file.size > 1_500_000 || max < 1600 || !/^image\/(jpeg|png|webp|gif)$/.test(file.type))) blob = await shrinkImage(file, max);
-  if (blob.size > 1_800_000) blob = await shrinkImage(blob, 1200, 0.75);
-  const r = await fetch(API + "/media", { method: "POST", headers: { "content-type": blob.type || "image/jpeg", "x-pupka-name": who || "x" }, body: blob });
+  const isGif = file.type === "image/gif";
+  const keepGif = isGif && file.size <= MAX_UPLOAD;
+  if (isGif && !keepGif) throw new Error("GIF jest za duży (max 14 MB).");
+  if (!keepGif && (file.size > 1_500_000 || max < 1600 || !/^image\/(jpeg|png|webp)$/.test(file.type))) blob = await shrinkImage(file, max);
+  if (blob.size > 1_800_000 && !keepGif) blob = await shrinkImage(blob, 1200, 0.75);
+  let r;
+  try { r = await fetch(API + "/media", { method: "POST", headers: { "content-type": blob.type || "image/jpeg", "x-pupka-name": who || "x" }, body: blob }); }
+  catch (e) { throw new Error("Brak połączenia z serwerem. Sprawdź sieć i spróbuj jeszcze raz."); }
   const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(j.error || "Upload nie wyszedł");
+  if (!r.ok) throw new Error(j.error || "Nie udało się wgrać pliku.");
+  return j.url;
+}
+
+export async function importImageUrl(url) {
+  let r;
+  try { r = await fetch(API + "/media/import", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ url }) }); }
+  catch (e) { throw new Error("Brak połączenia z serwerem. Sprawdź sieć i spróbuj jeszcze raz."); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || "Nie udało się pobrać obrazka.");
   return j.url;
 }
 

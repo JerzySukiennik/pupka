@@ -22,6 +22,8 @@ Działaj od razu. Nie proś o pozwolenie ani potwierdzenie i nie pytaj "czy na p
 
 Rysowanie: gdy proszą o narysowanie, szkic, schemat, wykres lub diagram (atom, komórka, obieg, oś czasu, bryła, mapa myśli, układ współrzędnych), użyj narzędzia draw_on_card zamiast szukać obrazka w internecie. Obrazek z internetu tylko wtedy, gdy proszą o zdjęcie, obrazek, portret, mapę lub logo. Układ współrzędnych rysunku: x od 0 do 620, y od 0 do height, początek w lewym górnym rogu obszaru. Zaplanuj układ, zanim zaczniesz: co gdzie leży, nic nie nachodzi na siebie, wszystko mieści się w 620 x height. Każda figura to {type, points, color, width, fill, text, size}. Typy: line i arrow (dwa punkty: początek i koniec), rect i ellipse (dwa punkty: przeciwległe rogi ramki; okrąg to elipsa z kwadratowej ramki), curve (gładka krzywa przez 3 i więcej punktów), polygon i polyline (łamana, polygon się domyka), label (jeden punkt to lewy dolny róg tekstu, text i size 12-18). Kolory zapisuj jako #rrggbb, czarny #111111, tekst i kontury zwykle czarne, kilka kolorów tylko tam, gdzie niosą znaczenie. Wypełnienie (fill) tylko dla małych elementów jak jądro czy elektron. Podpisuj najważniejsze części po polsku i ustawiaj etykiety obok elementów, nie na liniach. Dobry rysunek ma od 10 do 60 figur i height dopasowany do treści (zwykle 250-450). Przykład atomu helu: jądro ellipse [[290,130],[330,170]] fill #e03131, orbita ellipse [[170,30],[450,270]] color #2f7cf6, elektron ellipse [[158,138],[178,158]] fill #2f7cf6, elektron ellipse [[442,142],[462,162]] fill #2f7cf6, podpis label [[340,120]] text "jądro: protony i neutrony" size 14, strzałka arrow [[338,128],[320,148]]. Rysunek pojawia się pod wskazanym blokiem (after_block, 0 oznacza koniec karty) w zarezerwowanym polu.
 
+Teksty utworów: gdy proszą o wklejenie lub cytat z lektury, wiersza lub pieśni, użyj find_text i wstaw znaleziony tekst bez zmian (każdy wers w osobnej linii), z tytułem jako nagłówkiem i adresem źródła w jednym zdaniu pod spodem. Nie przepisuj utworów z pamięci i nie odmawiaj, dopóki nie spróbujesz find_text; jeśli pierwszy wynik nie pasuje, spróbuj raz z inną frazą. Jeśli i tak nie ma tekstu, powiedz to krótko.
+
 Czat jest wspólny dla trzech osób; przed pytaniem widzisz, kto je zadał.
 
 ${MARKDOWN_RULES}`;
@@ -45,6 +47,11 @@ export const TOOLS = [
     name: "delete_drawings",
     description: "Usuwa odręczne rysunki (kreski, kształty, etykiety tekstowe) z aktualnej karty. Bez parametru usuwa wszystkie, z parametrem author tylko rysunki tej osoby, a author „AI” usuwa rysunki narysowane przez AI (czyli twoje). Nie rusza tekstu ani obrazków.",
     input_schema: { type: "object", properties: { author: { type: "string", description: "opcjonalnie: Jurek, Janek, Jaś albo AI (rysunki narysowane przez AI)" } } }
+  },
+  {
+    name: "find_text",
+    description: "Wyszukuje pełny tekst utworu z domeny publicznej (lektury, wiersze, pieśni, bajki, ustawy) w Wikiźródłach (pl.wikisource.org) i zwraca tytuł, adres i tekst. Użyj, gdy ktoś prosi o wklejenie, przepisanie lub cytat z lektury albo wiersza, zamiast pisać z pamięci.",
+    input_schema: { type: "object", properties: { query: { type: "string", description: "autor i tytuł, np. 'Kochanowski Pieśń IX księgi wtóre' albo 'Mickiewicz Pan Tadeusz Inwokacja'" } }, required: ["query"] }
   },
   {
     name: "draw_on_card",

@@ -89,7 +89,7 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
   const capture = document.createElement("div");
   capture.className = "draw-capture";
   layer.append(svgStatic, svgLive, capture);
-  pageEl.appendChild(layer);
+  (pmEl.parentElement || pageEl).appendChild(layer);
 
   const st = {
     active: false, tool: "pen", color: color || "#111", size: 4,
@@ -102,13 +102,13 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
   let raf = 0;
 
   function layout() {
-    const pr = pageEl.getBoundingClientRect(), r = pmEl.getBoundingClientRect();
-    layer.style.left = (r.left - pr.left - pageEl.clientLeft) + "px";
-    layer.style.top = (r.top - pr.top - pageEl.clientTop) + "px";
-    layer.style.width = r.width + "px";
-    layer.style.height = r.height + "px";
     tops = new Map();
     for (const el of pmEl.children) if (el.dataset && el.dataset.bid) tops.set(el.dataset.bid, el.offsetTop);
+    let lowest = 0;
+    strokes.forEach((s) => { const t = topOf(s); for (const pt of s.p) lowest = Math.max(lowest, t + pt[1] + (s.t === "label" ? 8 : (s.w || 4) * 2)); });
+    let contentBottom = 0;
+    for (const el of pmEl.children) contentBottom = Math.max(contentBottom, el.offsetTop + el.offsetHeight);
+    pmEl.style.setProperty("--draw-extra", Math.max(0, Math.round(lowest + 24 - contentBottom)) + "px");
   }
   function topOf(s) { const t = tops.get(s.bid); return t == null ? (s.fy || 0) : t; }
   function anchorFor(y) {
@@ -191,12 +191,12 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
 
   let liveEl = null;
   let draftTimer = 0;
-  function broadcastDraft(d) {
+  function broadcastDraft(d, force) {
     if (!provider) return;
     const now = performance.now();
-    if (d && now - draftTimer < 90) return;
+    if (d && !force && now - draftTimer < 90) return;
     draftTimer = now;
-    provider.awareness.setLocalStateField("draft", d ? { t: d.t, c: d.c, w: d.w, p: d.p.filter((_, i) => i % 2 === 0 || i === d.p.length - 1).map(([x, y]) => [Math.round(x), Math.round(y)]) } : null);
+    provider.awareness.setLocalStateField("draft", d ? { t: d.t, c: d.c, w: d.w, txt: d.txt, p: d.p.filter((_, i) => i % 2 === 0 || i === d.p.length - 1).map(([x, y]) => [Math.round(x), Math.round(y)]) } : null);
   }
   function previewOf(d) {
     const g = build("live", d);
@@ -332,6 +332,8 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     box.textContent = s ? s.txt : "";
     layer.appendChild(box);
     labelInput = { box, p, existingId };
+    const sendDraft = () => { const t = box.innerText.replace(/\n+$/, ""); broadcastDraft(t ? { t: "label", c: s ? s.c : st.color, w: s ? (s.w || 16) : 16, p: [p], txt: t } : null, true); };
+    box.addEventListener("input", sendDraft);
     box.focus();
     if (s) { const r = document.createRange(); r.selectNodeContents(box); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); }
     box.addEventListener("keydown", (e) => {
@@ -347,6 +349,7 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     labelInput = null;
     const txt = box.innerText.replace(/\n+$/, "").trim();
     box.remove();
+    broadcastDraft(null, true);
     if (!commitIt) return;
     if (existingId) {
       const s = strokes.get(existingId);
@@ -542,6 +545,7 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
       return recs.length;
     },
     rerender: schedule,
+    relayout() { layout(); renderAll(); },
     destroy() {
       ro.disconnect();
       window.removeEventListener("resize", schedule);

@@ -5,7 +5,7 @@ import { SYSTEM_CHAT, SYSTEM_REWRITE, TOOLS } from "./prompts.mjs";
 
 const MODEL = "claude-haiku-5-5";
 const PRICE = [1, 5];
-const MAX_IMG = 1_800_000;
+const MAX_IMG = 6_000_000;
 
 function usdOf(u) {
   return ((u.input_tokens || 0) * PRICE[0] + (u.output_tokens || 0) * PRICE[1] + (u.cache_read_input_tokens || 0) * PRICE[0] * 0.1 + (u.cache_creation_input_tokens || 0) * PRICE[0] * 1.25) / 1e6;
@@ -74,6 +74,26 @@ async function wikiPages(lang, params) {
   const j = await r.json().catch(() => ({}));
   return Object.values((j.query && j.query.pages) || {}).filter((p) => p.thumbnail && !p.missing).sort((a, b) => (a.index || 0) - (b.index || 0))
     .map((p) => ({ url: p.thumbnail.source, title: p.title, width: p.thumbnail.width, height: p.thumbnail.height, page: p.fullurl }));
+}
+
+async function findText(rawQuery) {
+  const query = String(rawQuery || "").slice(0, 160);
+  const api = (params) => { const u = new URL("https://pl.wikisource.org/w/api.php"); u.search = new URLSearchParams(Object.assign({ format: "json", origin: "*" }, params)).toString(); return fetch(u, { headers: UA, signal: AbortSignal.timeout(8000) }).then((r) => r.json()).catch(() => ({})); };
+  const found = await api({ action: "query", list: "search", srsearch: query, srlimit: "6", srnamespace: "0" });
+  const hits = ((found.query && found.query.search) || []).map((h) => h.title);
+  if (!hits.length) return { error: "Nie znalazłem takiego tekstu w Wikiźródłach.", tried: query };
+  for (const title of hits.slice(0, 3)) {
+    const ex = await api({ action: "query", prop: "extracts", explaintext: "1", exsectionformat: "plain", titles: title, redirects: "1" });
+    const page = Object.values((ex.query && ex.query.pages) || {})[0];
+    let text = page && page.extract ? String(page.extract).trim() : "";
+    if (!text) {
+      const parsed = await api({ action: "parse", page: title, prop: "text", redirects: "1", disablelimitreport: "1" });
+      const html = parsed.parse && parsed.parse.text && parsed.parse.text["*"];
+      if (html) text = html.replace(/<(style|script)[\s\S]*?<\/\1>/gi, "").replace(/<br\s*\/?>/gi, "\n").replace(/<\/(p|div|li|dd|h\d)>/gi, "\n").replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\n{3,}/g, "\n\n").trim();
+    }
+    if (text && text.length > 40) return { title, url: "https://pl.wikisource.org/wiki/" + encodeURIComponent(title.replace(/ /g, "_")), text: text.slice(0, 14000), truncated: text.length > 14000, other_results: hits.filter((h) => h !== title).slice(0, 5) };
+  }
+  return { error: "Znalazłem strony, ale bez czytelnego tekstu.", results: hits };
 }
 
 async function searchImages(env, rawQuery, origin) {
@@ -160,6 +180,9 @@ export async function chat(req, env, origin, sse) {
           const items = await searchImages(env, String(t.input.query || "").slice(0, 200), origin);
           sse({ t: "images", items });
           result = items.length ? JSON.stringify(items) : "Nic nie znaleziono. Spróbuj innego zapytania lub powiedz użytkownikowi, że nie znalazłeś.";
+        } else if (t.name === "find_text") {
+          sse({ t: "status", text: "szukam tekstu: " + String(t.input.query || "").slice(0, 60) });
+          result = JSON.stringify(await findText(t.input.query));
         } else if (t.name === "draw_on_card") {
           const shapes = Array.isArray(t.input.shapes) ? t.input.shapes.slice(0, 160) : [];
           sse({ t: "draw", after_block: t.input.after_block || 0, height: t.input.height || 300, shapes });

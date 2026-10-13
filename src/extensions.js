@@ -412,8 +412,19 @@ function delimRule(find, markName) {
 
 export const Shortcuts = Extension.create({
   name: "shortcuts",
+  priority: 1000,
   addInputRules() {
+    const absorb = new InputRule({
+      find: /^(\d+[.)]|[-*•])\s$/,
+      handler: ({ state, range }) => {
+        const $from = state.doc.resolve(range.from);
+        if ($from.depth < 2 || $from.node($from.depth - 1).type.name !== "listItem" || $from.parent.type.name !== "paragraph") return null;
+        if ($from.parent.content.size !== 0 && $from.parentOffset !== 0) return null;
+        state.tr.delete(range.from, range.to);
+      }
+    });
     return [
+      absorb,
       delimRule(/(?:^|\s)(__([^_\n]+)__)$/, "underline"),
       delimRule(/(\^([^^\s][^^\n]*?)\^)$/, "superscript"),
       delimRule(/(?:^|[^~])(~([^~\s][^~\n]*?)~)$/, "subscript")
