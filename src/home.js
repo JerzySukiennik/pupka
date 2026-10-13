@@ -5,7 +5,7 @@ import { uploadImage, dataUrlToBlob } from "./net.js";
 import { topbar, avatarHtml, presenceHtml } from "./ui.js";
 import { icon } from "./icons.js";
 import { esc } from "./md.js";
-import { userWords, removeUserWord } from "./spell.js";
+import { userWords, removeUserWord, spellStatus, loadSpeller, reloadSpeller } from "./spell.js";
 
 const WEEKDAYS = ["niedziela", "poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota"];
 function go(hash) { location.hash = hash; }
@@ -261,6 +261,7 @@ export function renderSettings(root) {
     </section>
     <section><div class="eyebrow">Słownik pisowni</div>
       <p class="muted hint">Błędy podkreśla Pupka (czerwona falka). Kliknij podkreślone słowo, żeby wybrać poprawkę, dodać je do słownika albo zignorować. Nic nie poprawia się samo. Słowa dodane do słownika są wspólne dla was wszystkich.</p>
+      <div class="dict-status" data-dict-status></div>
       <div class="dict-words">${userWords().length ? userWords().map((w) => `<span class="dict-chip">${esc(w)}<button data-rmword="${esc(w)}" title="Usuń ze słownika">${icon("close", 12)}</button></span>`).join("") : `<span class="muted">Jeszcze nic nie dodaliście.</span>`}</div>
     </section>
     <section><div class="eyebrow">Ten komputer</div>
@@ -269,6 +270,15 @@ export function renderSettings(root) {
     <img class="watermark settings-wm" src="assets/gzowo-labs-fire.gif" alt="Gzowo Labs">
   </main>`;
   const main = root.querySelector("main");
+  const paintDict = () => {
+    const el = main.querySelector("[data-dict-status]");
+    if (!el) return;
+    const st = spellStatus();
+    const label = { idle: "jeszcze niewczytany", loading: "wczytuję…", ok: "działa", broken: "uszkodzony", error: "nie udało się wczytać" }[st.state] || st.state;
+    el.innerHTML = `<span>Słownik pisowni: <b class="${st.state === "ok" ? "" : "bad"}">${esc(label)}</b>${st.detail ? ` <span class="muted">(${esc(st.detail)})</span>` : ""}</span><button class="btn small" data-dict-reload>Pobierz ponownie</button>`;
+  };
+  paintDict();
+  loadSpeller().then(paintDict);
   main.addEventListener("change", async (e) => {
     const t = e.target;
     if (t.dataset.set === "font") settings.set("font", t.value);
@@ -285,6 +295,7 @@ export function renderSettings(root) {
     const b = e.target.closest("button");
     if (!b) return;
     if (b.dataset.rmword) { removeUserWord(b.dataset.rmword); return; }
+    if (b.hasAttribute("data-dict-reload")) { b.disabled = true; b.textContent = "Pobieram…"; reloadSpeller().then(() => { if (document.body.contains(main)) paintDict(); }); return; }
     if (b.classList.contains("upload-btn")) { main.querySelector(".avatar-pick input").click(); return; }
     if (b.classList.contains("remove-avatar")) { users.set(name, Object.assign({}, myProfile(), { avatar: null })); updatePresence(); renderSettings(root); return; }
     if (b.dataset.mycolor) { users.set(name, Object.assign({}, myProfile(), { color: b.dataset.mycolor })); updatePresence(); main.querySelectorAll("[data-mycolor]").forEach((x) => x.classList.toggle("on", x === b)); main.querySelector(".avatar-pick").style.setProperty("--c", b.dataset.mycolor); main.querySelector(".avatar-pick .avatar").style.setProperty("--c", b.dataset.mycolor); }

@@ -15,35 +15,65 @@ export function spellerReady() { return !!speller; }
 export function userWords() { return Array.from(dictMap.keys()).sort((a, b) => a.localeCompare(b, "pl")); }
 export function removeUserWord(w) { dictMap.delete(w); }
 
-async function fetchCached(url) {
-  try {
-    const cache = await caches.open("pupka-dict-v1");
-    const hit = await cache.match(url);
-    if (hit) return await hit.arrayBuffer();
-    const r = await fetch(url);
-    if (!r.ok) throw new Error("dict " + r.status);
-    try { await cache.put(url, r.clone()); } catch (e) { /* quota */ }
-    return await r.arrayBuffer();
-  } catch (e) {
-    const r = await fetch(url);
-    if (!r.ok) throw e;
-    return await r.arrayBuffer();
-  }
+const SELF_TEST = ["nie", "się", "jest", "że", "to", "na", "tak", "jak", "ale", "może", "bardzo", "który", "była", "było", "będzie", "szkoła", "człowiek", "lekcja", "książka", "wszystko", "dlatego", "ponieważ", "między", "przed", "przez", "kiedy", "woda", "ziemia", "historia"];
+const status = { state: "idle", detail: "", pass: 0, total: SELF_TEST.length, bytes: 0 };
+export function spellStatus() { return Object.assign({}, status); }
+
+async function fetchDict(url, fresh) {
+  const cache = await caches.open("pupka-dict-v1").catch(() => null);
+  if (!fresh && cache) { const hit = await cache.match(url).catch(() => null); if (hit) return { buf: await hit.arrayBuffer(), from: "cache" }; }
+  const r = await fetch(url, fresh ? { cache: "reload" } : undefined);
+  if (!r.ok) throw new Error("serwer odpowiedział " + r.status);
+  const buf = await r.arrayBuffer();
+  const want = parseInt(r.headers.get("content-length") || "0", 10);
+  if (want && buf.byteLength !== want) throw new Error("plik pobrał się niepełny");
+  if (cache) { try { await cache.put(url, new Response(buf.slice(0), { headers: { "content-type": "application/octet-stream" } })); } catch (e) { /* quota */ } }
+  return { buf, from: "sieć" };
 }
 
-export function loadSpeller() {
-  if (speller) return Promise.resolve(speller);
-  if (loading) return loading;
+function check(sp) {
+  const expected = Math.ceil(sp.bloom.bits / 32);
+  if (sp.bloom.words.length !== expected) return { ok: false, detail: "rozmiar pliku się nie zgadza", pass: 0 };
+  const pass = SELF_TEST.filter((w) => sp.bloom.has(w)).length;
+  return { ok: pass >= SELF_TEST.length - 2, detail: "test " + pass + "/" + SELF_TEST.length, pass };
+}
+
+async function build(fresh) {
   const base = new URL("/dist/", location.origin);
-  loading = Promise.all([fetchCached(new URL("pl.bloom", base).href), fetchCached(new URL("pl-freq.txt", base).href)])
-    .then(([bloom, freq]) => {
-      speller = Speller.from(bloom, new TextDecoder().decode(freq));
+  const [bloom, freq] = await Promise.all([fetchDict(new URL("pl.bloom", base).href, fresh), fetchDict(new URL("pl-freq.txt", base).href, fresh)]);
+  const sp = Speller.from(bloom.buf, new TextDecoder().decode(freq.buf));
+  const c = check(sp);
+  return { sp, c, from: bloom.from, bytes: bloom.buf.byteLength };
+}
+
+export function loadSpeller(force) {
+  if (speller && !force) return Promise.resolve(speller);
+  if (loading && !force) return loading;
+  status.state = "loading"; status.detail = "";
+  loading = (async () => {
+    try {
+      let r = await build(!!force);
+      if (!r.c.ok && r.from === "cache") r = await build(true);
+      status.pass = r.c.pass; status.bytes = r.bytes;
+      if (!r.c.ok) { status.state = "broken"; status.detail = r.c.detail; speller = null; listeners.forEach((fn) => fn()); return null; }
+      speller = r.sp;
       speller.setUserWords(userWords());
+      status.state = "ok"; status.detail = r.c.detail + ", " + r.from;
       listeners.forEach((fn) => fn());
       return speller;
-    })
-    .catch((e) => { loading = null; console.warn("spell dictionary unavailable", e); return null; });
+    } catch (e) {
+      status.state = "error"; status.detail = String((e && e.message) || e).slice(0, 120);
+      loading = null; speller = null; listeners.forEach((fn) => fn());
+      return null;
+    }
+  })();
   return loading;
+}
+
+export async function reloadSpeller() {
+  try { const cache = await caches.open("pupka-dict-v1"); const keys = await cache.keys(); await Promise.all(keys.map((k) => cache.delete(k))); } catch (e) { /* no cache api */ }
+  speller = null; loading = null;
+  return loadSpeller(true);
 }
 
 dictMap.observe(() => { if (speller) { speller.setUserWords(userWords()); listeners.forEach((fn) => fn()); } });
@@ -56,6 +86,7 @@ function sentenceStart(text, from) {
 
 function scan(doc, selection) {
   const ranges = [];
+  let total = 0;
   if (!speller) return ranges;
   doc.descendants((node, pos) => {
     if (!node.isTextblock) return true;
@@ -72,6 +103,7 @@ function scan(doc, selection) {
       const at = doc.nodeAt(from);
       if (at && at.marks.some((m) => m.type.name === "code")) continue;
       const parts = word.split(/['’‐-]/).filter(Boolean);
+      total++;
       const bad = parts.length ? parts.some((p) => p.length >= 2 && !speller.ok(p)) : false;
       if (!bad) continue;
       if (selection && selection.empty && selection.from >= from && selection.from <= to && (to === selection.from) && !/[\p{L}]/u.test(text[w.to] || " ")) continue;
@@ -79,6 +111,7 @@ function scan(doc, selection) {
     }
     return false;
   });
+  if (total >= 15 && ranges.length / total > 0.6) return [];
   return ranges;
 }
 

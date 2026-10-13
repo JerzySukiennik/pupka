@@ -34,7 +34,7 @@ export class Speller {
   ignore(word) { this.ignored.add(word.toLowerCase()); }
 
   ok(word) {
-    const w = word.toLowerCase();
+    const w = word.normalize("NFC").replace(/[\u00ad\u200b-\u200d\ufeff]/g, "").toLowerCase();
     return this.user.has(w) || this.ignored.has(w) || this.bloom.has(w);
   }
 
@@ -139,7 +139,7 @@ export function wordsIn(text) {
   while ((m = re.exec(text))) {
     const chunk = m[0];
     if (/[\p{N}@#/\\:_=<>{}[\]|^~*$%&+]/u.test(chunk) || /^https?|www\./i.test(chunk)) continue;
-    const parts = /[\p{L}\p{M}]+(?:['’‐-][\p{L}\p{M}]+)*/gu;
+    const parts = /[\p{L}\p{M}\u00ad\u200b-\u200d\ufeff]+(?:['\u2019\u2010-][\p{L}\p{M}\u00ad\u200b-\u200d\ufeff]+)*/gu;
     let w;
     while ((w = parts.exec(chunk))) {
       const start = m.index + w.index, word = w[0];
