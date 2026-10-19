@@ -380,6 +380,22 @@ body.hide-cursors .collaboration-cursor__selection { background: transparent !im
 .ai-status { color: var(--fg3); font-size: 11px; padding: 0 16px 4px; min-height: 16px; }
 .ai-form { display: flex; gap: 6px; padding: 10px 12px 14px; border-top: 1px solid var(--line); align-items: flex-end; }
 .ai-form textarea { flex: 1; resize: none; max-height: 160px; line-height: 1.4; background: var(--bg2); }
+.ai-clip { width: 36px; height: 36px; border-radius: var(--r); color: var(--fg2); flex: none; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line2); }
+.ai-clip:hover { color: var(--fg); background: var(--bg3); }
+.ai-attach { display: none; gap: 6px; flex-wrap: wrap; padding: 8px 12px 0; border-top: 1px solid var(--line); }
+.ai-panel.has-attach .ai-attach { display: flex; }
+.ai-panel.has-attach .ai-form { border-top: 0; }
+.att { position: relative; display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 3px; border: 1px solid var(--line2); border-radius: 8px; max-width: 100%; }
+.att img { width: 44px; height: 32px; object-fit: cover; border-radius: 5px; background: #fff; }
+.att-label { font-size: 11.5px; color: var(--fg2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 170px; }
+.att button { width: 20px; height: 20px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: var(--fg3); }
+.att button:hover { background: var(--bg3); color: var(--fg); }
+.ai-hint { padding: 0 12px 10px; color: var(--fg3); font-size: 11px; margin-top: -6px; }
+.ai-panel.dropping { box-shadow: inset 0 0 0 2px var(--ai); }
+.page.pointing, .page.pointing * { cursor: crosshair !important; }
+.point-layer { position: absolute; left: 0; top: 0; width: 100%; height: 100%; overflow: visible; pointer-events: none; z-index: 8; }
+.point-path { fill: rgba(168,85,247,.08); stroke: #a855f7; stroke-width: 2.5; stroke-dasharray: 8 5; stroke-linejoin: round; }
+@media print { .point-layer { display: none !important; } }
 .ai-send { width: 36px; height: 36px; border-radius: var(--r); background: var(--ai); color: #111; flex: none; display: inline-flex; align-items: center; justify-content: center; }
 
 /* Gzowo Labs watermark */

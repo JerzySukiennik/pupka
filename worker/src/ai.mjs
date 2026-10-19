@@ -157,6 +157,26 @@ export async function chat(req, env, origin, sse) {
   ].filter(Boolean).join("\n\n");
   const system = [{ type: "text", text: SYSTEM_CHAT, cache_control: { type: "ephemeral" } }, { type: "text", text: context }];
   const messages = history.map((m, i) => i === history.length - 1 ? { role: "user", content: `${p.person || "Uczeń"}: ${m.content}` } : m);
+  const att = Array.isArray(p.attachments) ? p.attachments.slice(0, 4) : [];
+  if (att.length) {
+    const blocks = [{ type: "text", text: messages[messages.length - 1].content }];
+    for (const a of att) {
+      const m = /\/media\/(.+)$/.exec(String(a.url || ""));
+      if (!m) continue;
+      const r = await env.MEDIA.get(env.MEDIA.idFromName("media")).fetch("https://media/" + m[1]);
+      if (!r.ok) continue;
+      const ct = (r.headers.get("content-type") || "image/jpeg").split(";")[0];
+      if (!/^image\/(jpeg|png|gif|webp)$/.test(ct)) continue;
+      const bytes = new Uint8Array(await r.arrayBuffer());
+      if (bytes.byteLength > 4_500_000) continue;
+      let bin = "";
+      for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+      const nums = Array.isArray(a.blocks) ? a.blocks.filter((n) => Number.isInteger(n)).slice(0, 40) : [];
+      blocks.push({ type: "text", text: a.kind === "point" ? `Użytkownik obrysował ten fragment kartki${nums.length ? " (bloki " + nums.map((n) => "[" + n + "]").join(", ") + ")" : ""}. Obrys jest fioletową przerywaną linią, reszta jest przyciemniona.` : "Użytkownik dołączył ten obraz." });
+      blocks.push({ type: "image", source: { type: "base64", media_type: ct, data: btoa(bin) } });
+    }
+    messages[messages.length - 1] = { role: "user", content: blocks };
+  }
   let usd = 0;
   let edited = false;
   for (let round = 0; round < 6; round++) {

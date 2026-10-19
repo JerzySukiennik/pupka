@@ -10,6 +10,7 @@ import { docToPlain, esc } from "./md.js";
 import { topbar, avatarHtml, presenceHtml } from "./ui.js";
 import { icon } from "./icons.js";
 import { Spell } from "./spell.js";
+import { createPointer } from "./point.js";
 
 const PAGE_CONTENT_H = 971;
 
@@ -115,6 +116,12 @@ export function openCard(root, id) {
   const draw = createDraw({ pageEl, pmEl, ydoc: entry.doc, provider: entry.provider, name, color: prof.color || "#111", canEdit: () => canEdit, onChange: syncDrawUi, undoManager });
   pageEl.__draw = draw;
   const aiPanel = createAiPanel({ editor, entry, getCard: () => getCard(id) || c, container: view.querySelector(".ai-panel"), onEdited: () => draw.rerender(), draw, undo: () => editor.commands.undo() });
+  const pointer = createPointer({
+    pageEl, pmEl,
+    isActive: () => aiPanel.isOpen(),
+    onPick: (shot) => { if (shot) aiPanel.addAttachment({ kind: "point", blob: shot.blob, thumb: shot.thumb, blocks: shot.blocks }); else toast("Nie udało się zrobić zrzutu zaznaczenia.", 4000); },
+    onBusy: (v) => aiPanel.setPointing(v)
+  });
   const selMenu = createSelectionMenu({ editor, aiPanel, isDrawing: () => draw.isActive() });
 
   let mode = "text";
@@ -449,6 +456,7 @@ export function openCard(root, id) {
       clearTimeout(trimTimer);
       closeMathPopover();
       selMenu.destroy();
+      pointer.destroy();
       aiPanel.destroy();
       draw.destroy();
       editor.destroy();

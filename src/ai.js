@@ -1,7 +1,7 @@
 /* AI panel per card (shared chat in the card doc), edit application as one transaction, selection bubble menu. */
 
 import { TextSelection } from "../lib/vendor.js";
-import { aiChat, aiRewrite } from "./net.js";
+import { aiChat, aiRewrite, uploadImage } from "./net.js";
 import { parseMarkdown, docToBlocks, mdToHtml, esc } from "./md.js";
 import { me, allCards, subject, fmtDate, AI_COLOR, colorOf, uid } from "./store.js";
 import { icon } from "./icons.js";
@@ -65,7 +65,9 @@ export function createAiPanel({ editor, entry, getCard, container, onEdited, dra
     <div class="ai-head">${icon("sparkle", 16)}<b>AI</b><span class="ai-sub">wspólny czat tej karty</span><button class="icon-btn ai-close" title="Zamknij (Cmd+J)">${icon("close", 16)}</button></div>
     <div class="ai-msgs"></div>
     <div class="ai-status"></div>
-    <form class="ai-form"><textarea rows="1" placeholder="Zapytaj, poproś o poprawkę albo o obrazek…"></textarea><button type="submit" class="ai-send" title="Wyślij (Enter)">${icon("send", 16)}</button></form>`;
+    <div class="ai-attach"></div>
+    <form class="ai-form"><button type="button" class="ai-clip" title="Dołącz obraz (albo wklej / przeciągnij)">${icon("image", 16)}</button><textarea rows="1" placeholder="Zapytaj, poproś o poprawkę albo o obrazek…"></textarea><button type="submit" class="ai-send" title="Wyślij (Enter)">${icon("send", 16)}</button></form>
+    <div class="ai-hint">Shift + obrysuj fragment kartki, żeby pokazać go AI</div>`;
   const msgs = container.querySelector(".ai-msgs");
   const status = container.querySelector(".ai-status");
   const form = container.querySelector(".ai-form");
@@ -73,6 +75,29 @@ export function createAiPanel({ editor, entry, getCard, container, onEdited, dra
   let busy = false;
   let liveEl = null;
   let lastIdx = -1;
+  const attachEl = container.querySelector(".ai-attach");
+  let attachments = [];
+  function paintAttach() {
+    attachEl.innerHTML = attachments.map((a, i) => `<span class="att${a.pending ? " pending" : ""}"><img src="${a.thumb}" alt=""><span class="att-label">${a.kind === "point" ? (a.blocks && a.blocks.length ? "Zaznaczenie · akapit " + a.blocks.join(", ") : "Zaznaczenie") : "Obraz"}</span><button type="button" data-rm="${i}" title="Usuń">${icon("close", 12)}</button></span>`).join("");
+    container.classList.toggle("has-attach", attachments.length > 0);
+  }
+  attachEl.addEventListener("click", (e) => { const b = e.target.closest("[data-rm]"); if (!b) return; const a = attachments.splice(+b.dataset.rm, 1)[0]; if (a && a.thumb) URL.revokeObjectURL(a.thumb); paintAttach(); });
+  function addAttachment(a) {
+    if (!a || !a.blob) return;
+    if (attachments.length >= 4) attachments.shift();
+    attachments.push(a);
+    paintAttach();
+    api.toggle(true);
+  }
+  function addImageFiles(files) {
+    for (const f of Array.from(files || []).filter((f) => /^image\//.test(f.type)).slice(0, 4)) addAttachment({ kind: "image", blob: f, thumb: URL.createObjectURL(f) });
+  }
+  container.querySelector(".ai-clip").addEventListener("click", () => {
+    const inp = document.createElement("input");
+    inp.type = "file"; inp.accept = "image/*"; inp.multiple = true;
+    inp.onchange = () => addImageFiles(inp.files);
+    inp.click();
+  });
 
   function render() {
     const arr = chat.toArray();
@@ -82,7 +107,7 @@ export function createAiPanel({ editor, entry, getCard, container, onEdited, dra
     msgs.scrollTop = msgs.scrollHeight;
   }
   function msgHtml(m, i) {
-    if (m.role === "user") return `<div class="msg user"><span class="who" style="color:${colorOf(m.name)}">${esc(m.name)}</span>${esc(m.text)}</div>`;
+    if (m.role === "user") return `<div class="msg user"><span class="who" style="color:${colorOf(m.name)}">${esc(m.name)}</span>${esc(m.text)}${(m.attachments || []).length ? `<div class="ai-imgs">${m.attachments.map((a) => `<a href="${esc(a.url)}" target="_blank" title="${a.kind === "point" ? "zaznaczenie na kartce" : "obraz"}"><img src="${esc(a.url)}" alt=""></a>`).join("")}</div>` : ""}</div>`;
     const body = mdToHtml(m.text || "");
     const imgs = (m.images || []).map((im) => `<a href="${esc(im.url)}" target="_blank"><img src="${esc(im.url)}" alt=""></a>`).join("");
     return `<div class="msg ai"><span class="who" style="color:${AI_COLOR}">AI${m.name ? " · dla " + esc(m.name) : ""}</span>${body}${imgs ? `<div class="ai-imgs">${imgs}</div>` : ""}${m.edited ? `<div class="ai-note">Zmieniłem kartę.${i === lastIdx ? ` <button class="ai-undo" type="button">Cofnij</button>` : ""}</div>` : ""}${m.text && m.text.trim() && !m.edited ? `<button class="ai-insert" data-i="${i}">Wstaw do notatki</button>` : ""}</div>`;
@@ -107,17 +132,39 @@ export function createAiPanel({ editor, entry, getCard, container, onEdited, dra
   function autosize() { ta.style.height = "auto"; ta.style.height = Math.min(160, ta.scrollHeight) + "px"; }
   ta.addEventListener("input", autosize);
   ta.addEventListener("keydown", (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); } });
-  form.addEventListener("submit", (e) => { e.preventDefault(); const t = ta.value.trim(); if (t) { ta.value = ""; autosize(); send(t); } });
+  ta.addEventListener("paste", (e) => { const files = Array.from((e.clipboardData && e.clipboardData.files) || []).filter((f) => /^image\//.test(f.type)); if (files.length) { e.preventDefault(); addImageFiles(files); } });
+  container.addEventListener("dragover", (e) => { if (e.dataTransfer && Array.from(e.dataTransfer.types || []).includes("Files")) { e.preventDefault(); container.classList.add("dropping"); } });
+  container.addEventListener("dragleave", (e) => { if (!container.contains(e.relatedTarget)) container.classList.remove("dropping"); });
+  container.addEventListener("drop", (e) => { container.classList.remove("dropping"); const files = Array.from((e.dataTransfer && e.dataTransfer.files) || []).filter((f) => /^image\//.test(f.type)); if (files.length) { e.preventDefault(); e.stopPropagation(); addImageFiles(files); } });
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    let t = ta.value.trim();
+    if (!t && attachments.length) t = attachments.some((a) => a.kind === "point") ? "Spójrz na zaznaczony fragment." : "Spójrz na ten obraz.";
+    if (t) { ta.value = ""; autosize(); send(t); }
+  });
 
   async function send(text) {
     if (busy) return;
     busy = true;
     const card = getCard();
     const name = me();
-    chat.push([{ role: "user", name, text, ts: Date.now() }]);
+    const pending = attachments; attachments = []; paintAttach();
+    const sent = [];
+    if (pending.length) {
+      status.textContent = "wysyłam załączniki…";
+      for (const a of pending) {
+        try {
+          const file = a.blob instanceof File ? a.blob : new File([a.blob], "zaznaczenie.jpg", { type: a.blob.type || "image/jpeg" });
+          const url = await uploadImage(file, name, 1600);
+          sent.push({ kind: a.kind, url, blocks: a.blocks || [] });
+        } catch (err) { status.textContent = "nie udało się wysłać załącznika: " + err.message; }
+        if (a.thumb) URL.revokeObjectURL(a.thumb);
+      }
+    }
+    chat.push([{ role: "user", name, text, ts: Date.now(), attachments: sent }]);
     const bids = [];
     editor.state.doc.forEach((n) => bids.push(n.attrs && n.attrs.bid));
-    const history = chat.toArray().slice(-16).map((m) => ({ role: m.role, content: m.role === "user" ? `${m.name}: ${m.text}` : m.text }));
+    const history = chat.toArray().slice(-16).map((m) => ({ role: m.role, content: m.role === "user" ? `${m.name}: ${m.text}${(m.attachments || []).length ? " (z załącznikami)" : ""}` : m.text }));
     const sub = subject(card.subject);
     liveEl = document.createElement("div");
     liveEl.className = "msg ai live";
@@ -133,7 +180,8 @@ export function createAiPanel({ editor, entry, getCard, container, onEdited, dra
     try {
       await aiChat({
         messages: history, person: name, subject: sub ? sub.name : "", title: card.title, date: fmtDate(card.date),
-        blocks: docToBlocks(editor.state.doc), cards: cardsIndexText(card.id), drawings: draw ? draw.summary() : ""
+        blocks: docToBlocks(editor.state.doc), cards: cardsIndexText(card.id), drawings: draw ? draw.summary() : "",
+        attachments: sent
       }, (ev) => {
         if (ev.t === "delta") { acc += ev.text; textEl.innerHTML = mdToHtml(acc); msgs.scrollTop = msgs.scrollHeight; }
         else if (ev.t === "status") status.textContent = ev.text;
@@ -162,6 +210,8 @@ export function createAiPanel({ editor, entry, getCard, container, onEdited, dra
 
   const api = {
     send,
+    addAttachment,
+    setPointing(v) { container.classList.toggle("pointing-busy", !!v); status.textContent = v ? "robię zrzut zaznaczenia…" : ""; },
     toggle(v) {
       const open = v == null ? !container.classList.contains("open") : v;
       container.classList.toggle("open", open);
