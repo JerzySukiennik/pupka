@@ -1,5 +1,7 @@
 /* Pupka: graphite chrome, one white A4 page, Lucide icons. */
 
+@font-face { font-family: "Jurek Hand"; src: url("assets/fonts/JurekHand.woff2") format("woff2"); font-weight: 100 900; font-display: swap; }
+
 :root {
   --bg: #141416; --bg2: #1a1a1d; --bg3: #222226; --bg4: #2a2a2f; --line: #26262b; --line2: #333338;
   --fg: #ececef; --fg2: #9a9aa3; --fg3: #5f5f68; --accent: #4c8dff; --ai: #b48cff; --danger: #ff5c5c;
