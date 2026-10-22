@@ -1,0 +1,23 @@
+name = "pupka-api"
+main = "src/index.mjs"
+compatibility_date = "2026-10-01"
+workers_dev = true
+
+[vars]
+DAILY_USD = "2"
+
+[[durable_objects.bindings]]
+name = "ROOM"
+class_name = "Room"
+
+[[durable_objects.bindings]]
+name = "MEDIA"
+class_name = "Media"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Room", "Media"]
+
+[[kv_namespaces]]
+binding = "LIMITS"
+id = "b93f9105e67a4d3da8b590f1d779a3cd"

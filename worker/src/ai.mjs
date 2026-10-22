@@ -144,6 +144,8 @@ async function storeImages(env, items, origin) {
   return out;
 }
 
+export const INTIMATE = /(?<![\p{L}])(srom\p{L}*|pochw(a|y|ę|ie|ą|om|ach|ami)|łechtacz\p{L}*|penis\p{L}*|prąci\p{L}*|moszn\p{L}*|narząd\p{L}* (płciow|rozrodcz|intymn)\p{L}*|genital\p{L}*|vulva\p{L}*|vagina\p{L}*|labia|clitor\p{L}*|scrotum|testic\p{L}*|pubic)(?![\p{L}])/iu;
+
 export async function chat(req, env, origin, sse) {
   const p = await req.json();
   const history = (p.messages || []).slice(-16).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "").slice(0, 8000) }));
@@ -195,6 +197,8 @@ export async function chat(req, env, origin, sse) {
           const stub = env.ROOM.get(env.ROOM.idFromName("card:" + id));
           result = await (await stub.fetch("https://room/text")).text();
           result = result.slice(0, 30000) || "(pusta karta)";
+        } else if (t.name === "search_images" && INTIMATE.test(String(t.input.query || ""))) {
+          result = "Do narządów płciowych i intymnych części ciała nie wstawiasz zdjęć z internetu (to byłyby zdjęcia prawdziwych osób). Narysuj opisany schemat narzędziem draw_on_card, jak w podręczniku.";
         } else if (t.name === "search_images") {
           sse({ t: "status", text: "szukam obrazka: " + t.input.query });
           const items = await searchImages(env, String(t.input.query || "").slice(0, 200), origin);
