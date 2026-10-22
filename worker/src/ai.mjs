@@ -123,6 +123,34 @@ async function searchImages(env, rawQuery, origin) {
   return storeImages(env, items.slice(0, 6), origin);
 }
 
+const DIAGRAM_BAD = /(FGM|mutilat|cutting|surg|pierc|cancer|disease|infect|herpes|HPV|STD|STI|porn|erotic|sexual (position|intercourse)|kama|fetish|torture|circumcis|abort|syphil|vasectom|snail|bufon)/i;
+const DIAGRAM_OK = /(anatom|diagram|organ|genital|vulva|clitor|penis|labeled|illustration|schemat|reproductive|sexual organs)/i;
+
+export async function diagramCandidates(rawQuery) {
+  const male = /(męsk|penis|prąci|moszn|scrotum|testic|jąder|male )/i.test(String(rawQuery || ""));
+  const qs = male
+    ? ["male external genital organs anatomy diagram", "penis anatomy labeled diagram", "male reproductive system diagram"]
+    : ["external female genital organs anatomy diagram", "vulva anatomy labeled diagram", "female external genitalia illustration", "female reproductive system diagram"];
+  const items = [], seen = new Set();
+  for (const q of qs) {
+    try {
+      const u = new URL("https://commons.wikimedia.org/w/api.php");
+      u.search = new URLSearchParams({ action: "query", generator: "search", gsrsearch: q + " filetype:drawing", gsrnamespace: "6", gsrlimit: "8", prop: "imageinfo", iiprop: "url|size|mime", iiurlwidth: "1200", format: "json", origin: "*" }).toString();
+      const r = await fetch(u, { headers: UA, signal: AbortSignal.timeout(6000) });
+      const j = await r.json().catch(() => ({}));
+      for (const p of Object.values((j.query && j.query.pages) || {}).sort((a, b) => (a.index || 0) - (b.index || 0))) {
+        const ii = p.imageinfo && p.imageinfo[0];
+        const title = p.title.replace(/^File:/, "");
+        if (!ii || !ii.thumburl || !/svg|png/.test(ii.mime) || DIAGRAM_BAD.test(title) || !DIAGRAM_OK.test(title) || seen.has(ii.thumburl)) continue;
+        seen.add(ii.thumburl);
+        items.push({ url: ii.thumburl, title, width: ii.thumbwidth || ii.width, height: ii.thumbheight || ii.height, page: ii.descriptionurl });
+      }
+    } catch (e) { /* next query */ }
+    if (items.length >= 5) break;
+  }
+  return items;
+}
+
 async function storeImages(env, items, origin) {
   const out = [];
   for (const it of items.slice(0, 5)) {
@@ -198,7 +226,10 @@ export async function chat(req, env, origin, sse) {
           result = await (await stub.fetch("https://room/text")).text();
           result = result.slice(0, 30000) || "(pusta karta)";
         } else if (t.name === "search_images" && INTIMATE.test(String(t.input.query || ""))) {
-          result = "Do narządów płciowych i intymnych części ciała nie wstawiasz zdjęć z internetu (to byłyby zdjęcia prawdziwych osób). Narysuj opisany schemat narzędziem draw_on_card, jak w podręczniku.";
+          sse({ t: "status", text: "szukam diagramu anatomicznego" });
+          const items = await storeImages(env, await diagramCandidates(String(t.input.query || "")), origin);
+          sse({ t: "images", items });
+          result = items.length ? JSON.stringify(items) + "\nTo są wyłącznie rysunki i diagramy anatomiczne (bez zdjęć). Wybierz najlepiej opisany i wstaw przez edit_card." : "Nie ma gotowego diagramu. Narysuj opisany schemat narzędziem draw_on_card, jak w podręczniku (zdjęć tych okolic nie wstawiasz).";
         } else if (t.name === "search_images") {
           sse({ t: "status", text: "szukam obrazka: " + t.input.query });
           const items = await searchImages(env, String(t.input.query || "").slice(0, 200), origin);
