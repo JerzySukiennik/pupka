@@ -3,6 +3,7 @@
 
 import { Y, getStroke } from "../lib/vendor.js";
 import { uid } from "./store.js";
+import { loadPixels, floodRegion, maskToRings } from "./fill.js";
 
 export const SIZES = [2, 4, 8];
 export const COLORS = ["#111111", "#2f7cf6", "#e03131", "#1fa463", "#f28c28", "#a855f7", "#0fb5c9", "#ffd43b"];
@@ -165,6 +166,11 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     } else if (s.t === "ellipse") {
       const [a, b] = s.p;
       g.appendChild(svg("ellipse", { cx: (a[0] + b[0]) / 2, cy: (a[1] + b[1]) / 2, rx: Math.abs(b[0] - a[0]) / 2, ry: Math.abs(b[1] - a[1]) / 2, fill: s.f || "none", stroke: s.c, "stroke-width": w }));
+    } else if (s.t === "area") {
+      const rings = []; let o = 0;
+      for (const n of (s.r && s.r.length ? s.r : [s.p.length])) { rings.push(s.p.slice(o, o + n)); o += n; }
+      const d = rings.filter((r) => r.length > 2).map((r) => "M" + r.map((q) => q[0] + "," + q[1]).join("L") + "Z").join("");
+      g.appendChild(svg("path", { d, fill: s.f || s.c || "#2f7cf6", "fill-opacity": s.o == null ? 0.45 : s.o, "fill-rule": "evenodd", stroke: "none" }));
     } else if (s.t === "poly") {
       g.appendChild(svg(s.closed ? "polygon" : "polyline", { points: s.p.map((p) => p.join(",")).join(" "), fill: s.f || "none", stroke: s.c, "stroke-width": w, "stroke-linejoin": "round", "stroke-linecap": "round" }));
     } else if (s.t === "label") {
@@ -236,6 +242,46 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
   }
   function reanchor(absPoints, s) { return record(absPoints, s); }
 
+  function imageEl(bid) { const fig = pmEl.querySelector('.img-figure[data-bid="' + bid + '"]'); return fig && fig.querySelector("img"); }
+  async function fillImage(bid, fills, author) {
+    layout();
+    const im = imgs.get(bid), el = imageEl(bid);
+    if (!im || !el || im.w < 20) throw new Error("Nie widzę tego obrazka na karcie.");
+    const px = await loadPixels(el.currentSrc || el.src);
+    const kx = im.w / px.w, ky = im.h / px.h;
+    const recs = [], notes = [];
+    for (const f of (Array.isArray(fills) ? fills : []).slice(0, 24)) {
+      const sx = (+f.x / 1000) * px.w, sy = (+f.y / 1000) * px.h;
+      if (!Number.isFinite(sx) || !Number.isFinite(sy)) continue;
+      const res = floodRegion(px, sx, sy, { walls: f.walls, gap: f.gap, tolerance: f.tolerance });
+      if (!res.mask) { notes.push("punkt (" + Math.round(f.x) + ", " + Math.round(f.y) + ") leży na linii"); continue; }
+      if (res.leak) { notes.push("obszar przy (" + Math.round(f.x) + ", " + Math.round(f.y) + ") wylewa się na cały obrazek, pominięty"); continue; }
+      const rings = maskToRings(res.mask, px.w, px.h, 1.1);
+      if (!rings.length) continue;
+      const flat = [], lens = [];
+      for (const r of rings) { lens.push(r.length); for (const q of r) flat.push([Math.round(q[0] * kx * 10) / 10, Math.round(q[1] * ky * 10) / 10]); }
+      const color = /^#[0-9a-fA-F]{6}$/.test(String(f.color || "")) ? f.color : st.color;
+      const op = Number.isFinite(+f.opacity) && f.opacity !== null ? Math.max(0.15, Math.min(0.9, +f.opacity)) : 0.45;
+      recs.push({ t: "area", p: flat, r: lens, f: color, c: color, o: op, w: 1, a: bid, aw: r1(im.w), by: author || name, ts: Date.now() });
+    }
+    if (recs.length) tx(() => recs.forEach((r) => strokes.set(uid(), r)));
+    return { count: recs.length, notes };
+  }
+  let filling = false;
+  async function fillAtPoint(p) {
+    if (filling) return;
+    const hitImg = imageAt(p);
+    const hint = (t) => onChange && onChange(Object.assign(api.getState(), { hint: t }));
+    if (!hitImg) { hint("Wiadro działa na obrazkach (np. mapach). Kliknij w obszar na obrazku."); return; }
+    filling = true; layer.classList.add("busy");
+    try {
+      const r = hitImg.r;
+      const res = await fillImage(hitImg.bid, [{ x: (p[0] - r.left) / r.w * 1000, y: (p[1] - r.top) / r.h * 1000, color: st.color }], name);
+      if (!res.count) hint(res.notes[0] ? "Nie wypełniłem: " + res.notes[0] + "." : "Nie znalazłem obszaru do wypełnienia.");
+    } catch (e) { hint(e.message); }
+    finally { filling = false; layer.classList.remove("busy"); }
+  }
+
   function printCleanup() {
     (pmEl.parentElement || pageEl).querySelectorAll(":scope > .print-copy").forEach((n) => n.remove());
   }
@@ -294,7 +340,6 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
       if (!s) continue;
       const pts = absPts(s);
       if (!pts.length) continue;
-      if (!pts.length) return;
       const bb = s.t === "label" ? { x0: pts[0][0], y0: pts[0][1] - (s.w || 16), x1: pts[0][0] + String(s.txt || "").length * (s.w || 16) * 0.55, y1: pts[0][1] + 4 } : bbox(pts);
       const pad = s.t === "hl" ? (s.w || 4) * 2 : (s.w || 4);
       b = { x0: Math.min(b.x0, bb.x0 - pad), y0: Math.min(b.y0, bb.y0 - pad), x1: Math.max(b.x1, bb.x1 + pad), y1: Math.max(b.y1, bb.y1 + pad) };
@@ -350,6 +395,13 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     const hit = [];
     strokes.forEach((s, id) => {
       const pts = absPts(s);
+      if (!pts.length) return;
+      if (s.t === "area") {
+        let o = 0, inside = false;
+        for (const n of (s.r && s.r.length ? s.r : [pts.length])) { if (inPoly(p, pts.slice(o, o + n))) inside = !inside; o += n; }
+        if (inside) hit.push(id);
+        return;
+      }
       const bb = s.t === "label" ? { x0: pts[0][0], y0: pts[0][1] - 16, x1: pts[0][0] + String(s.txt || "").length * 9, y1: pts[0][1] + 4 } : bbox(pts);
       const r = ERASE_R + (s.w || 4);
       if (p[0] < bb.x0 - r || p[0] > bb.x1 + r || p[1] < bb.y0 - r || p[1] > bb.y1 + r) return;
@@ -439,6 +491,7 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
       openLabel(ex ? absPts(strokes.get(ex))[0] : p, ex);
       return;
     }
+    if (tool === "fill") { fillAtPoint(p); return; }
     if (tool === "eraser") { st.drawing = { tool, last: p }; eraseAt(p); return; }
     if (tool === "lasso") {
       const b = selectionBounds();
@@ -566,9 +619,97 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     hasSelection() { return st.selection.size > 0; },
     selectAll() { st.selection = new Set(strokes.keys()); drawSelection(); },
     count() { return strokes.size; },
-    clearAll(author) {
+    fillImage,
+    imageSig(bid) { let n = 0, t = 0; strokes.forEach((s) => { if (s.a === bid) { n++; t = Math.max(t, s.ts || 0); } }); const im = imgs.get(bid); return n + ":" + t + ":" + (im ? Math.round(im.w) : 0); },
+    async imageSnapshot(bid) {
+      layout();
+      const im = imgs.get(bid), el = imageEl(bid);
+      if (!im || !el) return null;
+      const src = await new Promise((res, rej) => { const i = new Image(); i.crossOrigin = "anonymous"; i.onload = () => res(i); i.onerror = () => rej(new Error("obrazek")); i.src = el.currentSrc || el.src; });
+      const W = Math.min(1000, src.naturalWidth || im.w), H = Math.round(W * (src.naturalHeight || im.h) / (src.naturalWidth || im.w));
+      const c = document.createElement("canvas"); c.width = W; c.height = H;
+      const g = c.getContext("2d");
+      g.fillStyle = "#fff"; g.fillRect(0, 0, W, H); g.drawImage(src, 0, 0, W, H);
+      const sv = svg("svg", { xmlns: NS, width: W, height: H, viewBox: "0 0 " + im.w + " " + im.h });
+      strokes.forEach((s, id) => { if (s.a !== bid) return; const gg = build(id, s); const k = s.aw ? im.w / s.aw : 1; if (k !== 1) gg.setAttribute("transform", "scale(" + k + ")"); sv.appendChild(gg); });
+      if (sv.childNodes.length) {
+        const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(sv)], { type: "image/svg+xml" }));
+        await new Promise((res) => { const i = new Image(); i.onload = () => { g.drawImage(i, 0, 0, W, H); res(); }; i.onerror = res; i.src = url; });
+        URL.revokeObjectURL(url);
+      }
+      g.lineWidth = 1; g.font = "bold 11px sans-serif"; g.textBaseline = "top";
+      for (let v = 100; v < 1000; v += 100) {
+        const x = Math.round(v / 1000 * W) + 0.5, y = Math.round(v / 1000 * H) + 0.5;
+        g.strokeStyle = v === 500 ? "rgba(0,0,0,.45)" : "rgba(0,0,0,.22)";
+        g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.moveTo(0, y); g.lineTo(W, y); g.stroke();
+        for (const [tx, ty] of [[x + 2, 2], [2, y + 2]]) { g.fillStyle = "rgba(255,255,255,.85)"; g.fillRect(tx - 1, ty - 1, 24, 13); g.fillStyle = "#000"; g.fillText(String(v), tx, ty); }
+      }
+      return await new Promise((r) => c.toBlob(r, "image/jpeg", 0.86));
+    },
+    addImageShapes(bid, shapes, author) {
+      layout();
+      const im = imgs.get(bid);
+      if (!im || im.w < 20) return 0;
+      const clamp = (v, a, b) => Math.max(a, Math.min(b, Number.isFinite(+v) ? +v : a));
+      const hex = (c, d) => /^#[0-9a-fA-F]{6}$/.test(String(c || "")) ? c : d;
+      const conv = (q) => [r1(clamp(q[0], -50, 1050) / 1000 * im.w), r1(clamp(q[1], -50, 1050) / 1000 * im.h)];
+      const recs = [];
+      for (const sh of Array.isArray(shapes) ? shapes.slice(0, 200) : []) {
+        const pts = (Array.isArray(sh.points) ? sh.points : []).slice(0, 400).filter((q) => Array.isArray(q) && q.length >= 2).map(conv);
+        if (!pts.length) continue;
+        const base = { c: hex(sh.color, "#e03131"), w: clamp(sh.width || 3, 1, 10), by: author || "AI", ts: Date.now(), a: bid, aw: r1(im.w) };
+        const f = sh.fill ? hex(sh.fill, null) : null;
+        const type = String(sh.type || "");
+        if (type === "line" || type === "arrow") { if (pts.length >= 2) recs.push(Object.assign(base, { t: type, p: [pts[0], pts[pts.length - 1]] })); }
+        else if (type === "rect" || type === "ellipse") { if (pts.length >= 2) recs.push(Object.assign(base, { t: type, p: [pts[0], pts[pts.length - 1]], f })); }
+        else if (type === "curve") { if (pts.length >= 2) recs.push(Object.assign(base, { t: "pen", p: smoothCurve(pts) })); }
+        else if (type === "polygon" || type === "polyline") { if (pts.length >= 2) recs.push(Object.assign(base, { t: "poly", p: pts, closed: type === "polygon", f })); }
+        else if (type === "label") { const txt = String(sh.text || "").slice(0, 90); if (txt) recs.push(Object.assign(base, { t: "label", p: [pts[0]], txt, w: clamp(sh.size || 15, 9, 32) })); }
+        else if (type === "box_text" && pts.length >= 2) {
+          const txt = String(sh.text || "").replace(/\s+/g, " ").trim().slice(0, 120);
+          if (!txt) continue;
+          const x0 = Math.min(pts[0][0], pts[1][0]), x1 = Math.max(pts[0][0], pts[1][0]), y0 = Math.min(pts[0][1], pts[1][1]), y1 = Math.max(pts[0][1], pts[1][1]);
+          const bw = Math.max(20, x1 - x0 - 12), bh = Math.max(12, y1 - y0 - 8);
+          const meas = document.createElement("canvas").getContext("2d");
+          const widthOf = (t, fs) => { meas.font = fs + "px Montserrat, sans-serif"; return meas.measureText(t).width; };
+          let size = clamp(sh.size || 16, 9, 28), lines = [txt];
+          for (; size >= 9; size--) {
+            const words = txt.split(" "), out = [];
+            let line = "";
+            for (const w of words) { const t = line ? line + " " + w : w; if (widthOf(t, size) <= bw || !line) line = t; else { out.push(line); line = w; } }
+            if (line) out.push(line);
+            if (out.every((l) => widthOf(l, size) <= bw) && out.length * size * 1.25 <= bh) { lines = out; break; }
+            lines = out;
+          }
+          const lh = size * 1.25, textH = lines.length * lh;
+          const widest = Math.max(...lines.map((l) => widthOf(l, size)));
+          const x = r1(x0 + Math.max(6, (x1 - x0 - widest) / 2)), y = r1(y0 + (y1 - y0 - textH) / 2 + size * 0.95);
+          recs.push(Object.assign(base, { t: "label", p: [[x, y]], txt: lines.join("\n"), w: size, c: hex(sh.color, "#1f1f1f") }));
+        }
+      }
+      if (recs.length) tx(() => recs.forEach((r) => strokes.set(uid(), r)));
+      return recs.length;
+    },
+    imageSummary(blockOf) {
+      layout();
+      const per = new Map();
+      strokes.forEach((s) => {
+        if (!s.a) return;
+        const im = imgs.get(s.a);
+        if (!im || !s.p.length) return;
+        const k = s.aw ? im.w / s.aw : 1;
+        const xs = s.p.map((q) => q[0] * k / im.w * 1000), ys = s.p.map((q) => q[1] * k / im.h * 1000);
+        if (!per.has(s.a)) per.set(s.a, []);
+        const kind = s.t === "area" ? "wypełnienie" : s.t === "label" ? 'napis "' + String(s.txt || "").slice(0, 30) + '"' : "kreska";
+        per.get(s.a).push(kind + " " + (s.f || s.c || "") + " x " + Math.round(Math.min(...xs)) + "-" + Math.round(Math.max(...xs)) + ", y " + Math.round(Math.min(...ys)) + "-" + Math.round(Math.max(...ys)) + " (" + (s.by || "?") + ")");
+      });
+      const out = [];
+      per.forEach((list, bid) => { const n = blockOf(bid); if (n) out.push("Na obrazku w bloku [" + n + "] jest " + list.length + " rysunków: " + list.slice(0, 25).join("; ")); });
+      return out.join("\n");
+    },
+    clearAll(author, onImage) {
       const ids = [];
-      strokes.forEach((s, id) => { if (!author || s.by === author) ids.push(id); });
+      strokes.forEach((s, id) => { if ((!author || s.by === author) && (!onImage || s.a === onImage)) ids.push(id); });
       if (ids.length) tx(() => ids.forEach((id) => strokes.delete(id)));
       clearSelection();
       return ids.length;

@@ -4,11 +4,12 @@
 import { SYSTEM_CHAT, SYSTEM_REWRITE, TOOLS } from "./prompts.mjs";
 
 const MODEL = "claude-haiku-5-5";
-const PRICE = [1, 5];
+const PRICES = { "claude-haiku-5-5": [0.1, 0.5], "claude-sonnet-5-5": [2, 10], "claude-opus-5-5": [4, 20] };
 const MAX_IMG = 6_000_000;
 
-function usdOf(u) {
-  return ((u.input_tokens || 0) * PRICE[0] + (u.output_tokens || 0) * PRICE[1] + (u.cache_read_input_tokens || 0) * PRICE[0] * 0.1 + (u.cache_creation_input_tokens || 0) * PRICE[0] * 1.25) / 1e6;
+function usdOf(u, model = MODEL) {
+  const pr = PRICES[model] || [4, 20];
+  return ((u.input_tokens || 0) * pr[0] + (u.output_tokens || 0) * pr[1] + (u.cache_read_input_tokens || 0) * pr[0] * 0.1 + (u.cache_creation_input_tokens || 0) * pr[0] * 1.25) / 1e6;
 }
 
 function day() { return new Date().toISOString().slice(0, 10); }
@@ -174,6 +175,21 @@ async function storeImages(env, items, origin) {
 
 export const INTIMATE = /(?<![\p{L}])(srom\p{L}*|pochw(a|y|ę|ie|ą|om|ach|ami)|łechtacz\p{L}*|penis\p{L}*|prąci\p{L}*|moszn\p{L}*|narząd\p{L}* (płciow|rozrodcz|intymn)\p{L}*|genital\p{L}*|vulva\p{L}*|vagina\p{L}*|labia|clitor\p{L}*|scrotum|testic\p{L}*|pubic)(?![\p{L}])/iu;
 
+async function imageBytes(env, url) {
+  const m = /\/media\/(.+)$/.exec(String(url || ""));
+  let r;
+  if (m) r = await env.MEDIA.get(env.MEDIA.idFromName("media")).fetch("https://media/" + m[1]);
+  else if (/^https?:\/\//i.test(String(url || ""))) r = await fetch(url, { headers: { "user-agent": "Mozilla/5.0 (Pupka school notebook)" }, signal: AbortSignal.timeout(8000) });
+  if (!r || !r.ok) return null;
+  const ct = (r.headers.get("content-type") || "image/jpeg").split(";")[0];
+  if (!/^image\/(jpeg|png|gif|webp)$/.test(ct)) return null;
+  const bytes = new Uint8Array(await r.arrayBuffer());
+  if (bytes.byteLength > 4_500_000) return null;
+  let bin = "";
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
+  return { media_type: ct, data: btoa(bin) };
+}
+
 export async function chat(req, env, origin, sse) {
   const p = await req.json();
   const history = (p.messages || []).slice(-16).map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content || "").slice(0, 8000) }));
@@ -182,6 +198,8 @@ export async function chat(req, env, origin, sse) {
     `AKTUALNA KARTA: przedmiot "${p.subject || "?"}", karta "${p.title || "(bez tematu)"}", data ${p.date || "?"}. Pyta: ${p.person || "?"}.`,
     `TREŚĆ KARTY (ponumerowane bloki):\n${String(p.blocks || "(pusta karta)").slice(0, 60000)}`,
     p.drawings ? `RYSUNKI ODRĘCZNE NA KARCIE: ${String(p.drawings).slice(0, 600)}` : "RYSUNKI ODRĘCZNE NA KARCIE: brak",
+    Array.isArray(p.images) && p.images.length ? `OBRAZKI NA KARCIE (można je obejrzeć view_image i rysować/kolorować na nich): ${p.images.slice(0, 20).map((i) => "[" + (i.block | 0) + "]" + (i.alt ? " " + String(i.alt).slice(0, 60) : "")).join(", ")}` : "",
+    p.imageDrawings ? `RYSUNKI NA OBRAZKACH (skala 0-1000):\n${String(p.imageDrawings).slice(0, 4000)}` : "",
     p.cards ? `INNE KARTY (id | przedmiot | data | temat):\n${String(p.cards).slice(0, 12000)}` : "",
     p.chatNote || ""
   ].filter(Boolean).join("\n\n");
@@ -210,8 +228,9 @@ export async function chat(req, env, origin, sse) {
   let usd = 0;
   let edited = false;
   for (let round = 0; round < 6; round++) {
-    const res = await anthropicStream(env, { model: MODEL, max_tokens: 9000, system, messages, tools: TOOLS, output_config: { effort: "medium" } }, sse);
-    usd += usdOf(res.usage);
+    const model = p.visual && env.VISION_MODEL ? env.VISION_MODEL : MODEL;
+    const res = await anthropicStream(env, { model, max_tokens: 12000, system, messages, tools: TOOLS, output_config: { effort: p.visual ? "high" : "medium" } }, sse);
+    usd += usdOf(res.usage, model);
     const tools = res.content.filter((b) => b.type === "tool_use");
     if (!tools.length || res.stop !== "tool_use") break;
     messages.push({ role: "assistant", content: res.content });
@@ -238,15 +257,37 @@ export async function chat(req, env, origin, sse) {
         } else if (t.name === "find_text") {
           sse({ t: "status", text: "szukam tekstu: " + String(t.input.query || "").slice(0, 60) });
           result = JSON.stringify(await findText(t.input.query));
+        } else if (t.name === "view_image") {
+          const n = t.input.block | 0;
+          const im = (Array.isArray(p.images) ? p.images : []).find((i) => (i.block | 0) === n);
+          if (!im) result = "W bloku [" + n + "] nie ma obrazka. Obrazki są w blokach: " + (p.images || []).map((i) => "[" + i.block + "]").join(", ");
+          else {
+            sse({ t: "status", text: "oglądam obrazek" });
+            const img = await imageBytes(env, im.grid_url || im.url);
+            result = img ? [
+              { type: "text", text: "Obrazek z bloku [" + n + "]" + (im.grid_url ? " z siatką: liczby na brzegach to współrzędne 0-1000 (x w prawo, y w dół). Widać rysunki, które były na obrazku w chwili wysłania wiadomości; twoje zmiany z tej odpowiedzi (usunięcia, wypełnienia, strzałki) nie są na nim widoczne, ale zostały wykonane, więc nie pisz, że coś dalej widać." : ". Współrzędne: x 0-1000 od lewej, y 0-1000 od góry.") },
+              { type: "image", source: Object.assign({ type: "base64" }, img) }
+            ] : "Nie udało się pobrać tego obrazka.";
+          }
+        } else if (t.name === "draw_on_image") {
+          const shapes = Array.isArray(t.input.shapes) ? t.input.shapes.slice(0, 200) : [];
+          sse({ t: "image_draw", block: t.input.block | 0, shapes });
+          edited = true;
+          result = shapes.length ? `Narysowano ${shapes.length} figur na obrazku.` : "Brak figur.";
+        } else if (t.name === "fill_on_image") {
+          const fills = Array.isArray(t.input.fills) ? t.input.fills.slice(0, 24) : [];
+          sse({ t: "image_fill", block: t.input.block | 0, fills });
+          edited = true;
+          result = fills.length ? `Wypełniam ${fills.length} obszarów na obrazku (dokładnie do linii).` : "Brak obszarów.";
         } else if (t.name === "draw_on_card") {
           const shapes = Array.isArray(t.input.shapes) ? t.input.shapes.slice(0, 160) : [];
           sse({ t: "draw", after_block: t.input.after_block || 0, height: t.input.height || 300, shapes });
           edited = true;
           result = shapes.length ? `Narysowano ${shapes.length} figur na karcie.` : "Brak figur do narysowania.";
         } else if (t.name === "delete_drawings") {
-          sse({ t: "drawings", author: t.input.author ? String(t.input.author).slice(0, 20) : null });
+          sse({ t: "drawings", author: t.input.author ? String(t.input.author).slice(0, 20) : null, block: t.input.on_image ? t.input.on_image | 0 : 0 });
           edited = true;
-          result = "Rysunki usunięte z karty.";
+          result = t.input.on_image ? "Rysunki z obrazka usunięte." : "Rysunki usunięte z karty.";
         } else if (t.name === "edit_card") {
           const ops = Array.isArray(t.input.ops) ? t.input.ops.slice(0, 60) : [];
           sse({ t: "edit", ops });

@@ -52,7 +52,7 @@ export function openCard(root, id) {
         <div class="tb-group draw-tools">
           <button data-tool="pen" class="on" title="Pióro (P, Shift = prosta)">${icon("pen")}</button><button data-tool="hl" title="Zakreślacz (H)">${icon("marker")}</button><button data-tool="eraser" title="Gumka (E)">${icon("eraser")}</button><button data-tool="lasso" title="Lasso: zaznacz, przesuń, kopiuj (L)">${icon("lasso")}</button>
           <span class="sep"></span>
-          <button data-tool="line" title="Linia">${icon("line")}</button><button data-tool="arrow" title="Strzałka (A)">${icon("arrow")}</button><button data-tool="rect" title="Prostokąt (R)">${icon("rect")}</button><button data-tool="ellipse" title="Elipsa (O)">${icon("ellipse")}</button><button data-tool="label" title="Tekst na rysunku (T)">${icon("text")}</button>
+          <button data-tool="line" title="Linia">${icon("line")}</button><button data-tool="arrow" title="Strzałka (A)">${icon("arrow")}</button><button data-tool="rect" title="Prostokąt (R)">${icon("rect")}</button><button data-tool="ellipse" title="Elipsa (O)">${icon("ellipse")}</button><button data-tool="label" title="Tekst na rysunku (T)">${icon("text")}</button><button data-tool="fill" title="Wiadro: wypełnij obszar na obrazku dokładnie do linii (B)">${icon("bucket")}</button>
           <span class="sep"></span>
           <div class="swatches">${COLORS.map((col) => `<button data-color="${col}" style="--c:${col}" title="Kolor"></button>`).join("")}</div>
           <span class="sep"></span>
@@ -135,6 +135,7 @@ export function openCard(root, id) {
     if (m === "text") editor.commands.focus(); else editor.view.dom.blur();
   }
   function syncDrawUi(s) {
+    if (s.hint) toast(s.hint, 4500);
     view.querySelectorAll("[data-tool]").forEach((b) => b.classList.toggle("on", b.dataset.tool === s.tool));
     view.querySelectorAll("[data-color]").forEach((b) => b.classList.toggle("on", b.dataset.color === s.color));
     view.querySelectorAll("[data-size]").forEach((b) => b.classList.toggle("on", +b.dataset.size === s.size));
@@ -415,7 +416,7 @@ export function openCard(root, id) {
     if (e.key === " ") { draw.setSpace(true); return; }
     if (mod) return;
     const k = e.key.toLowerCase();
-    const map = { p: "pen", h: "hl", e: "eraser", l: "lasso", t: "label", r: "rect", o: "ellipse", a: "arrow", "/": "line" };
+    const map = { p: "pen", h: "hl", e: "eraser", l: "lasso", t: "label", r: "rect", o: "ellipse", a: "arrow", "/": "line", b: "fill" };
     if (map[k]) { e.preventDefault(); draw.setTool(map[k]); }
     else if (["1", "2", "3"].includes(k)) draw.setSize(SIZES[+k - 1]);
   }

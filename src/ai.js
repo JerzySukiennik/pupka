@@ -143,6 +143,33 @@ export function createAiPanel({ editor, entry, getCard, container, onEdited, dra
     if (t) { ta.value = ""; autosize(); send(t); }
   });
 
+  const gridCache = new Map();
+  const IMAGE_TALK = /(obraz|obrazk|map|rysun|narysuj|rysuj|dorysuj|pokoloruj|koloru|kolor|zaznacz|strzał|podpis|zakreśl|wypełn|zamaluj|popraw|na zdjęci|schemat|diagram)/i;
+  async function gridded(list) {
+    if (!draw) return list;
+    const out = [];
+    for (const it of list) {
+      const bid = (() => { let n = 0, b = null; editor.state.doc.forEach((node) => { n++; if (n === it.block) b = node.attrs.bid; }); return b; })();
+      if (!bid) { out.push(it); continue; }
+      const sig = it.url + "|" + draw.imageSig(bid);
+      try {
+        if (!gridCache.has(sig)) {
+          const blob = await draw.imageSnapshot(bid);
+          if (blob) gridCache.set(sig, await uploadImage(new File([blob], "siatka.jpg", { type: "image/jpeg" }), me(), 1600));
+        }
+        out.push(Object.assign({}, it, gridCache.get(sig) ? { grid_url: gridCache.get(sig) } : {}));
+      } catch (e) { out.push(it); }
+    }
+    return out;
+  }
+
+  function imagesList() {
+    const out = [];
+    let n = 0;
+    editor.state.doc.forEach((node) => { n++; if (node.type.name === "image" && node.attrs.src) out.push({ block: n, url: node.attrs.src, alt: node.attrs.alt || "" }); });
+    return out.slice(0, 20);
+  }
+
   async function send(text) {
     if (busy) return;
     busy = true;
@@ -174,6 +201,12 @@ export function createAiPanel({ editor, entry, getCard, container, onEdited, dra
     let acc = "";
     let edited = false;
     const images = [];
+    const pendingWork = [];
+    let imgsForAI = imagesList();
+    if (imgsForAI.length && (IMAGE_TALK.test(text) || sent.some((a) => a.kind === "point"))) {
+      status.textContent = "przygotowuję obrazki dla AI…";
+      imgsForAI = await gridded(imgsForAI.slice(0, 4)).then((g) => g.concat(imgsForAI.slice(4)));
+    }
     status.textContent = "myślę…";
     container.classList.add("busy");
     if (entry.provider) entry.provider.awareness.setLocalStateField("ai", { by: name });
@@ -181,13 +214,26 @@ export function createAiPanel({ editor, entry, getCard, container, onEdited, dra
       await aiChat({
         messages: history, person: name, subject: sub ? sub.name : "", title: card.title, date: fmtDate(card.date),
         blocks: docToBlocks(editor.state.doc), cards: cardsIndexText(card.id), drawings: draw ? draw.summary() : "",
-        attachments: sent
+        attachments: sent,
+        visual: IMAGE_TALK.test(text) || sent.length > 0,
+        images: imgsForAI,
+        imageDrawings: draw ? draw.imageSummary((bid) => { const i = bids.indexOf(bid); return i >= 0 ? i + 1 : 0; }) : ""
       }, (ev) => {
         if (ev.t === "delta") { acc += ev.text; textEl.innerHTML = mdToHtml(acc); msgs.scrollTop = msgs.scrollHeight; }
         else if (ev.t === "status") status.textContent = ev.text;
         else if (ev.t === "images") { images.push(...(ev.items || [])); }
         else if (ev.t === "draw") { if (!editor.isEditable || !draw) { acc += "\n(Nie mogę rysować na tej karcie.)"; return; } status.textContent = "rysuję"; const n = applyDrawing(editor, draw, bids, ev); if (n) edited = true; else acc += "\n(Rysunek nie wyszedł, spróbuj jeszcze raz.)"; }
-        else if (ev.t === "drawings") { if (!editor.isEditable) { acc += "\n(Nie mogę zmieniać rysunków na cudzej kartce.)"; return; } const n = draw ? draw.clearAll(ev.author) : 0; if (n) edited = true; status.textContent = n ? "rysunki usunięte" : "nie było rysunków"; }
+        else if (ev.t === "image_draw" || ev.t === "image_fill") {
+          if (!editor.isEditable || !draw) { acc += "\n(Nie mogę rysować na tej karcie.)"; return; }
+          const bid = bids[(ev.block | 0) - 1];
+          if (!bid) { acc += "\n(Nie znalazłem obrazka w bloku " + ev.block + ".)"; return; }
+          if (ev.t === "image_draw") { const n = draw.addImageShapes(bid, ev.shapes, "AI"); if (n) edited = true; status.textContent = "rysuję na obrazku"; }
+          else {
+            status.textContent = "koloruję obszary";
+            pendingWork.push(draw.fillImage(bid, ev.fills, "AI").then((r) => { if (r.count) edited = true; if (r.notes && r.notes.length) acc += "\n(" + r.notes.join("; ") + ")"; }).catch((err) => { acc += "\n(" + err.message + ")"; }));
+          }
+        }
+        else if (ev.t === "drawings") { if (!editor.isEditable) { acc += "\n(Nie mogę zmieniać rysunków na cudzej kartce.)"; return; } const n = draw ? draw.clearAll(ev.author, ev.block ? bids[(ev.block | 0) - 1] : null) : 0; if (n) edited = true; status.textContent = n ? "rysunki usunięte" : "nie było rysunków"; }
         else if (ev.t === "edit") {
           if (!editor.isEditable) { acc += "\n(Nie mogę edytować tej karty: to nie twoja kartkówka.)"; return; }
           const n = applyEdits(editor, ev.ops || [], bids);
@@ -198,6 +244,7 @@ export function createAiPanel({ editor, entry, getCard, container, onEdited, dra
     } catch (e) {
       acc += "\n\n⚠️ " + e.message;
     }
+    if (pendingWork.length) await Promise.all(pendingWork);
     liveEl.remove();
     liveEl = null;
     chat.push([{ role: "assistant", name, text: acc.trim(), ts: Date.now(), edited, images: images.slice(0, 3) }]);

@@ -8,7 +8,7 @@ const MAP = {
   formula: V.Sigma, box: V.Frame, sign: V.Signature, pen: V.Pencil, marker: V.Highlighter, eraser: V.Eraser, lasso: V.Lasso,
   line: V.Slash, arrow: V.MoveUpRight, rect: V.Square, ellipse: V.Circle, text: V.Type, grid: V.Grip, eye: V.Eye, eyeOff: V.EyeOff,
   pages: V.SeparatorHorizontal, print: V.Printer, sparkle: V.Sparkles, send: V.SendHorizontal, close: V.X, plus: V.Plus,
-  more: V.Ellipsis, chevron: V.ChevronDown, restore: V.RotateCcw, check: V.Check, offline: V.WifiOff, write: V.PenLine, alignLeft: V.AlignLeft, alignCenter: V.AlignCenter, alignRight: V.AlignRight, move: V.Move, camera: V.Camera
+  more: V.Ellipsis, chevron: V.ChevronDown, restore: V.RotateCcw, check: V.Check, offline: V.WifiOff, write: V.PenLine, alignLeft: V.AlignLeft, alignCenter: V.AlignCenter, alignRight: V.AlignRight, move: V.Move, camera: V.Camera, bucket: V.PaintBucket
 };
 
 export function icon(name, size = 18) {

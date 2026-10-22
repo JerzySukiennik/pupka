@@ -18,7 +18,13 @@ Narządy płciowe i intymne części ciała (anatomia z biologii i edukacji zdro
 
 Obrazki: gdy proszą o obrazek, ilustrację, mapę, schemat, logo lub portret do tematu, użyj search_images z samą nazwą hasła encyklopedycznego (np. "Minecraft", "Mieszko I", "mitochondrium", bez słów "logo" czy "obrazek"). Pierwszy wynik to zwykle główny obrazek hasła z Wikipedii (dla gier i firm to ich logo). Jeśli nic nie pasuje, spróbuj raz jeszcze z innym hasłem (angielskim lub ogólniejszym), potem powiedz, że nie znalazłeś. Wybierz najlepiej pasujący wynik i wstaw go edit_card jako "![podpis](url)" w osobnej linii pod akapitem, którego dotyczy. Podpis po polsku, krótki.
 
-Rysunki odręczne (kreski, kształty, etykiety) nie są tekstem. Widzisz tylko ich liczbę i teksty etykiet. Możesz je usunąć narzędziem delete_drawings (wszystkie, tylko jednej osoby albo tylko swoje, author „AI”; gdy ktoś każe usunąć „ten rysunek”, który właśnie narysowałeś, usuń swoje), nie możesz ich dodawać ani przesuwać. Gdy ktoś prosi o usunięcie rysunków, od razu użyj narzędzia i potwierdź jednym zdaniem.
+Rysunki odręczne (kreski, kształty, napisy, wypełnienia) nie są tekstem. W kontekście dostajesz ich liczbę, a dla obrazków listę rysunków na każdym obrazku (rodzaj, kolor, położenie w skali 0-1000). Możesz je usuwać narzędziem delete_drawings (wszystkie, jednej osoby, tylko swoje z author „AI”, albo tylko z jednego obrazka przez on_image). Gdy ktoś prosi o usunięcie rysunków, od razu użyj narzędzia i potwierdź jednym zdaniem.
+
+Rysowanie i kolorowanie NA obrazku (mapy, schematy, zdjęcia na karcie): możesz i powinieneś to robić. Nigdy nie mów, że nie możesz rysować na obrazku ani zmienić kolorowania. Najpierw obejrzyj obrazek narzędziem view_image (dostaniesz go razem z siatką współrzędnych: x od 0 na lewej krawędzi do 1000 na prawej, y od 0 u góry do 1000 na dole). Potem:
+- draw_on_image: strzałki, obwódki, podpisy, linie i kształty w tych współrzędnych; rysunki są przypięte do obrazka i przesuwają się razem z nim.
+- fill_on_image: kolorowanie obszaru dokładnie do linii (jak wiaderko z farbą). Dla każdego obszaru podaj jeden punkt w jego środku, z dala od linii, oraz kolor. Gdy obszar ma być ograniczony konkretnymi liniami (np. przerywaną czerwoną granicą zlodowacenia i czarną granicą państwa), podaj ich kolory w walls, wtedy inne linie w środku (rzeki, siatka) nie przerywają wypełnienia; dla linii przerywanych ustaw gap 4-6. Bez walls obszar kończy się na każdej wyraźnie innej linii lub kolorze.
+- Uzupełnianie ramek i podpisów na schemacie (karta pracy, mapa z pustymi polami): najpierw dla każdej pustej ramki prześledź linię od ramki do kropki na jej końcu i rozpoznaj, co dokładnie wskazuje (kształt, położenie, sąsiedztwo), dopiero potem nazwij to fachowym terminem z podręcznika. Pomijaj ramki, w których coś już jest napisane. Tekst wpisuj typem box_text: points to dwa przeciwległe rogi WNĘTRZA ramki odczytane z siatki, text to sama nazwa; Pupka sama dobierze rozmiar, zawinie i wyśrodkuje tekst.
+- Gdy proszą o poprawienie istniejącego kolorowania („pokoloruj dokładnie do linii”), usuń stare kolorowanie z tego obrazka (delete_drawings z on_image), a potem pokoloruj obszary od nowa przez fill_on_image tymi samymi kolorami.
 
 Działaj od razu. Nie proś o pozwolenie ani potwierdzenie i nie pytaj "czy na pewno". Gdy polecenie da się wykonać przy rozsądnym założeniu (np. "ta książka o zwierzętach" to zapewne "Folwark zwierzęcy"), wykonaj je i w jednym zdaniu napisz, co założyłeś; użytkownik w razie pomyłki poprawi albo cofnie przyciskiem Cofnij. Pytaj tylko wtedy, gdy bez odpowiedzi nie da się zrobić nic sensownego. Nigdy nie proponuj, że "zmienisz, jeśli użytkownik napisze tak": po prostu zmień.
 
@@ -50,12 +56,41 @@ export const TOOLS = [
   {
     name: "delete_drawings",
     description: "Usuwa odręczne rysunki (kreski, kształty, etykiety tekstowe) z aktualnej karty. Bez parametru usuwa wszystkie, z parametrem author tylko rysunki tej osoby, a author „AI” usuwa rysunki narysowane przez AI (czyli twoje). Nie rusza tekstu ani obrazków.",
-    input_schema: { type: "object", properties: { author: { type: "string", description: "opcjonalnie: Jurek, Janek, Jaś albo AI (rysunki narysowane przez AI)" } } }
+    input_schema: { type: "object", properties: { author: { type: "string", description: "opcjonalnie: Jurek, Janek, Jaś albo AI (rysunki narysowane przez AI)" }, on_image: { type: "integer", description: "opcjonalnie: numer bloku z obrazkiem, wtedy usuwa tylko rysunki z tego obrazka" } } }
   },
   {
     name: "find_text",
     description: "Wyszukuje pełny tekst utworu z domeny publicznej (lektury, wiersze, pieśni, bajki, ustawy) w Wikiźródłach (pl.wikisource.org) i zwraca tytuł, adres i tekst. Użyj, gdy ktoś prosi o wklejenie, przepisanie lub cytat z lektury albo wiersza, zamiast pisać z pamięci.",
     input_schema: { type: "object", properties: { query: { type: "string", description: "autor i tytuł, np. 'Kochanowski Pieśń IX księgi wtóre' albo 'Mickiewicz Pan Tadeusz Inwokacja'" } }, required: ["query"] }
+  },
+  {
+    name: "view_image",
+    description: "Pokazuje ci obrazek z karty (np. mapę), żeby zobaczyć, co na nim jest i gdzie rysować. Zwraca obraz z naniesioną siatką współrzędnych 0-1000.",
+    input_schema: { type: "object", properties: { block: { type: "integer", description: "numer bloku [n] z obrazkiem" } }, required: ["block"] }
+  },
+  {
+    name: "draw_on_image",
+    description: "Rysuje na obrazku z karty: linie, strzałki, prostokąty, elipsy, krzywe, wielokąty i podpisy. Współrzędne względem obrazka: x 0-1000 od lewej, y 0-1000 od góry. Rysunki są przypięte do obrazka.",
+    input_schema: {
+      type: "object",
+      properties: {
+        block: { type: "integer", description: "numer bloku [n] z obrazkiem" },
+        shapes: { type: "array", items: { type: "object", properties: { type: { type: "string", enum: ["line", "arrow", "rect", "ellipse", "curve", "polygon", "polyline", "label", "box_text"], description: "box_text: tekst wpisany w ramkę, points = dwa rogi wnętrza ramki" }, points: { type: "array", items: { type: "array", items: { type: "number" } } }, color: { type: "string" }, width: { type: "number" }, fill: { type: "string" }, text: { type: "string" }, size: { type: "number" } }, required: ["type", "points"] } }
+      },
+      required: ["block", "shapes"]
+    }
+  },
+  {
+    name: "fill_on_image",
+    description: "Koloruje obszary na obrazku dokładnie do linii (wiaderko z farbą). Każde wypełnienie: punkt (x, y w skali 0-1000) w środku obszaru, kolor #rrggbb, opcjonalnie walls (kolory linii, które mają ograniczać obszar), gap (domykanie przerw w liniach przerywanych, px 0-12), opacity (0.2-0.8, domyślnie 0.45).",
+    input_schema: {
+      type: "object",
+      properties: {
+        block: { type: "integer", description: "numer bloku [n] z obrazkiem" },
+        fills: { type: "array", items: { type: "object", properties: { x: { type: "number" }, y: { type: "number" }, color: { type: "string" }, walls: { type: "array", items: { type: "string" } }, gap: { type: "number" }, opacity: { type: "number" } }, required: ["x", "y", "color"] } }
+      },
+      required: ["block", "fills"]
+    }
   },
   {
     name: "draw_on_card",
