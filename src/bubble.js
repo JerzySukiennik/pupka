@@ -23,7 +23,17 @@ export function createBubble({ editor, isDrawing, onExplain, toast }) {
   function paintTable() {
     el.innerHTML = `<button data-t="addRowAfter" class="lab" title="Dodaj wiersz">${icon("plus", 14)}<span>wiersz</span></button><button data-t="addColumnAfter" class="lab" title="Dodaj kolumnę">${icon("plus", 14)}<span>kolumna</span></button><button data-t="deleteRow" class="lab" title="Usuń wiersz">${icon("minus", 14)}<span>wiersz</span></button><button data-t="deleteColumn" class="lab" title="Usuń kolumnę">${icon("minus", 14)}<span>kolumna</span></button><button data-t="toggleHeaderRow" class="lab" title="Wiersz nagłówka">nagłówek</button><button data-t="deleteTable" class="g danger" title="Usuń tabelę">${icon("trash", 15)}</button>`;
   }
-  function hide() { el.classList.remove("on"); closeMenu(); }
+  const SPRING = "cubic-bezier(.34,1.56,.64,1)";
+  const calm = () => matchMedia("(prefers-reduced-motion: reduce)").matches || !el.animate;
+  function intro() {
+    el.classList.remove("glide");
+    if (!calm()) {
+      el.animate([{ opacity: 0, transform: "translateY(10px) scale(.84)", filter: "blur(4px)" }, { opacity: 1, transform: "none", filter: "blur(0)" }], { duration: 420, easing: SPRING });
+      Array.from(el.children).forEach((c, i) => c.animate([{ opacity: 0, transform: "translateY(8px) scale(.7)" }, { opacity: 1, transform: "none" }], { duration: 380, delay: 50 + i * 20, easing: SPRING, fill: "backwards" }));
+    }
+    requestAnimationFrame(() => requestAnimationFrame(() => el.classList.add("glide")));
+  }
+  function hide() { el.classList.remove("on", "glide"); closeMenu(); }
   function place(from, to, below) {
     const a = editor.view.coordsAtPos(from), b = editor.view.coordsAtPos(to);
     const w = el.offsetWidth, h = el.offsetHeight;
@@ -36,6 +46,7 @@ export function createBubble({ editor, isDrawing, onExplain, toast }) {
     if (busy || menu) return;
     const { from, to, empty } = editor.state.selection;
     if (!editor.isEditable || isDrawing() || !editor.view.hasFocus() || Date.now() < quietUntil) { hide(); return; }
+    const wasOn = el.classList.contains("on");
     if (empty && editor.isActive("table")) {
       if (el.dataset.kind !== "table") { paintTable(); el.dataset.kind = "table"; }
       let cellStart = from;
@@ -44,6 +55,7 @@ export function createBubble({ editor, isDrawing, onExplain, toast }) {
       const top = editor.view.coordsAtPos(cellStart);
       el.style.top = Math.max(60, top.top - el.offsetHeight - 12) + "px";
       el.style.left = Math.max(8, Math.min(window.innerWidth - el.offsetWidth - 8, top.left)) + "px";
+      if (!wasOn) intro();
       return;
     }
     const text = empty ? "" : editor.state.doc.textBetween(from, to, "\n");
@@ -51,6 +63,7 @@ export function createBubble({ editor, isDrawing, onExplain, toast }) {
     paintText(); el.dataset.kind = "text";
     el.classList.add("on");
     place(from, to);
+    if (!wasOn) intro();
   }
   editor.on("selectionUpdate", update);
   editor.on("transaction", () => { if (el.classList.contains("on") && el.dataset.kind === "text" && !menu && !busy) { paintText(); } });
@@ -71,6 +84,10 @@ export function createBubble({ editor, isDrawing, onExplain, toast }) {
     const r = anchor.getBoundingClientRect();
     menu.style.left = Math.min(window.innerWidth - menu.offsetWidth - 8, r.left) + "px";
     menu.style.top = (r.bottom + menu.offsetHeight + 6 > window.innerHeight ? r.top - menu.offsetHeight - 6 : r.bottom + 6) + "px";
+    if (!calm()) {
+      menu.animate([{ opacity: 0, transform: "translateY(-8px) scale(.9)" }, { opacity: 1, transform: "none" }], { duration: 360, easing: SPRING });
+      Array.from(menu.children).forEach((c, i) => c.animate([{ opacity: 0, transform: "translateX(-10px)" }, { opacity: 1, transform: "none" }], { duration: 340, delay: 30 + i * 28, easing: "cubic-bezier(.22,1,.36,1)", fill: "backwards" }));
+    }
     menu.addEventListener("mousedown", (e) => e.preventDefault());
     menu.addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; const k = b.dataset.k; closeMenu(); onPick(k); });
   }

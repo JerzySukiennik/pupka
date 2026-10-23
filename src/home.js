@@ -7,6 +7,7 @@ import { icon } from "./icons.js";
 import { esc } from "./md.js";
 import { userWords, removeUserWord, spellStatus, loadSpeller, reloadSpeller } from "./spell.js";
 import { SLOTS, DAY_NAMES, WEEK, lessonsOn, lessonNow, sameOptions, groupOf } from "./timetable.js";
+import { from as morphFrom, vt, NAMES as VT } from "./morph.js";
 
 const WEEKDAYS = ["niedziela", "poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota"];
 function go(hash) { location.hash = hash; }
@@ -67,10 +68,27 @@ export function renderPicker(root, onPicked) {
     t.classList.add("picked");
     el.querySelectorAll(".tile").forEach((x) => { if (x !== t) x.classList.add("away"); });
     el.classList.add(p.color ? "leaving" : "to-setup");
+    if (p.color) { notebook(t.querySelector(".tile-card"), colorOfTile(name), name); return; }
+    setTimeout(() => { leaving = false; setup(name); }, 420);
+  }
+  function notebook(src, color, name) {
+    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (!src || reduce || !src.animate) { el.classList.add("gone"); setTimeout(() => finish(name), 220); return; }
+    const r = src.getBoundingClientRect();
+    const fly = document.createElement("div");
+    fly.className = "pk-fly";
+    fly.style.cssText = `left:${r.left}px;top:${r.top}px;width:${r.width}px;height:${r.height}px;--c:${color}`;
+    document.body.appendChild(fly);
+    src.style.visibility = "hidden";
+    el.classList.add("leaving");
+    fly.animate([
+      { left: r.left + "px", top: r.top + "px", width: r.width + "px", height: r.height + "px", borderRadius: "22px", borderLeftWidth: "6px", backgroundColor: "#fffefb" },
+      { left: "0px", top: "0px", width: innerWidth + "px", height: innerHeight + "px", borderRadius: "0px", borderLeftWidth: "0px", backgroundColor: "#f5f4ee" }
+    ], { duration: 720, delay: 60, easing: "cubic-bezier(.7,0,.2,1)", fill: "forwards" });
     setTimeout(() => {
-      if (p.color) { el.classList.add("gone"); setTimeout(() => finish(name), 220); }
-      else { leaving = false; setup(name); }
-    }, p.color ? 380 : 420);
+      finish(name);
+      fly.animate([{ opacity: 1 }, { opacity: 0 }], { duration: 420, easing: "ease", fill: "forwards" }).finished.then(() => fly.remove(), () => fly.remove());
+    }, 790);
   }
   el.addEventListener("click", (e) => {
     const t = e.target.closest(".tile");
@@ -99,7 +117,7 @@ export function renderPicker(root, onPicked) {
     users.unobserve(obs); offStatus(); document.removeEventListener("keydown", onKey);
     el.remove(); setMe(name);
     document.body.classList.add("home-enter");
-    setTimeout(() => document.body.classList.remove("home-enter"), 1200);
+    setTimeout(() => document.body.classList.remove("home-enter"), 1800);
     onPicked();
   }
   function setup(name) {
@@ -141,8 +159,7 @@ export function renderPicker(root, onPicked) {
     const done = () => {
       const prev = users.get(name) || {};
       users.set(name, Object.assign({}, prev, { color, avatar: avatar || prev.avatar || null, fullName: box.querySelector(".fullname").value.trim() || name }));
-      el.classList.add("gone");
-      setTimeout(() => finish(name), 240);
+      notebook(box.querySelector(".setup-card"), color, name);
     };
     box.querySelector(".done").addEventListener("click", done);
     box.querySelector(".fullname").addEventListener("keydown", (e) => { if (e.key === "Enter") done(); });
@@ -162,6 +179,7 @@ function navHtml(on) {
 function whoOn(cardId) { return presence().filter((s) => s.card === cardId).map((s) => s.user); }
 function whoOnSubject(sid) { const ids = new Set(listCards(sid).map((c) => c.id)); return presence().filter((s) => s.card && ids.has(s.card)).map((s) => s.user); }
 function snippet(c, n = 150) { const t = (c.text || "").replace(/^\s*temat\s*:[^\n]*\n?/i, "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n).replace(/\s\S*$/, "") + "…" : t; }
+function letters(text) { let i = 0; return String(text).split(" ").map((w) => `<span class="hw">${Array.from(w).map((ch) => `<span class="hl" style="--i:${i++}">${esc(ch)}</span>`).join("")}</span>`).join(" "); }
 function cardLabel(c) { return c.title || c.name || snippet(c, 60) || "bez tematu"; }
 function todayChips() {
   const d = new Date();
@@ -201,18 +219,18 @@ export function renderHome(root) {
   root.innerHTML = `${topbar({ title: "", right: homeRight(), nav: navHtml("home") })}
   <main class="home">
     ${choiceMode ? choiceHtml : heroSub ? `<section class="hero">
-      <h1 class="hero-name">${esc(heroSub.name)}</h1>
+      <h1 class="hero-name">${letters(heroSub.name)}</h1>
       <div class="hero-side"><div class="kicker">${kicker}</div><p>${lead}${inside.length ? ` <span class="live-in">${presenceHtml(inside, 20)} ${esc(inside.map((u) => u.name).join(", "))} ${inside.length > 1 ? "piszą" : "pisze"} teraz</span>` : ""}</p>
         <div class="hero-go">${todayCard ? `<button class="btn primary big" data-open="${todayCard.id}">${icon("write", 16)}<span>Otwórz dzisiejszą lekcję</span></button>` : `<button class="btn primary big" data-new-lesson="${heroSub.id}">${icon("write", 16)}<span>${isNow ? "Zacznij dzisiejszą lekcję" : "Nowa lekcja"}</span></button>`}${!todayCard && last ? `<button class="btn big" data-open="${last.id}">Ostatnia lekcja</button>` : ""}<a class="btn big ghost" href="#/s/${heroSub.id}">Wszystkie</a></div></div>
     </section>` : `<section class="hero"><h1 class="hero-name">Pupka</h1><div class="hero-side"><p>Dodaj pierwszy przedmiot, a potem wpisz plan lekcji.</p><div class="hero-go"><button class="btn primary big" data-new-subject>${icon("plus", 16)}<span>Nowy przedmiot</span></button></div></div></section>`}
-    <div class="plan-chips">${chips.length ? chips.map((x) => `<span class="pc ${x.cur ? "cur" : x.past ? "past" : ""}"><b>${esc(x.start)}</b>${x.options.map((o) => (o.sub ? `<a href="#/s/${o.sub.id}">${esc(o.label)}</a>` : `<span>${esc(o.label)}</span>`)).join("<i>/</i>")}</span>`).join("") : `<a href="#/plan" class="pc quiet">${icon("calendar", 14)}<span>Dziś bez lekcji · plan tygodnia</span></a>`}</div>
+    <div class="plan-chips">${chips.length ? chips.map((x, ci) => `<span class="pc ${x.cur ? "cur" : x.past ? "past" : ""}" style="--i:${ci}"><b>${esc(x.start)}</b>${x.options.map((o) => (o.sub ? `<a href="#/s/${o.sub.id}">${esc(o.label)}</a>` : `<span>${esc(o.label)}</span>`)).join("<i>/</i>")}</span>`).join("") : `<a href="#/plan" class="pc quiet">${icon("calendar", 14)}<span>Dziś bez lekcji · plan tygodnia</span></a>`}</div>
     <div class="home-cols">
       <section class="toc"><h2>Przedmioty</h2>
-        ${subs.map((s) => { const n = listCards(s.id, "lesson").length; const who = whoOnSubject(s.id); return `<div class="toc-row"><a href="#/s/${s.id}" class="toc-link"><span class="toc-name">${esc(s.name)}</span><span class="toc-dots"></span>${who.length ? presenceHtml(who, 18) : ""}<span class="toc-n">${n}</span></a><button class="icon-btn toc-add" data-new-lesson="${s.id}" title="Nowa lekcja z ${esc(s.name)}">${icon("plus", 15)}</button><button class="icon-btn toc-more" data-subject-menu="${s.id}" title="Opcje">${icon("more", 15)}</button></div>`; }).join("")}
+        ${subs.map((s, ti) => { const n = listCards(s.id, "lesson").length; const who = whoOnSubject(s.id); return `<div class="toc-row" style="--i:${ti}"><a href="#/s/${s.id}" class="toc-link"><span class="toc-name"${vt(VT.title, morphFrom.subject === s.id)}>${esc(s.name)}</span><span class="toc-dots"></span>${who.length ? presenceHtml(who, 18) : ""}<span class="toc-n">${n}</span></a><button class="icon-btn toc-add" data-new-lesson="${s.id}" title="Nowa lekcja z ${esc(s.name)}">${icon("plus", 15)}</button><button class="icon-btn toc-more" data-subject-menu="${s.id}" title="Opcje">${icon("more", 15)}</button></div>`; }).join("")}
         <button class="toc-new" data-new-subject>${icon("plus", 15)}<span>Nowy przedmiot</span></button>
       </section>
       <section class="recent"><h2>Ostatnie kartki</h2>
-        <div class="thumbs">${recent.length ? recent.map((c) => { const s = subject(c.subject); const who = whoOn(c.id); return `<a class="thumb" href="#/c/${c.id}"><small>${esc(s ? s.name : "")}${c.kind === "test" ? " · na ocenę" : ""}</small><b>${esc(cardLabel(c))}</b><p>${esc(snippet(c))}</p>${c.img ? `<img src="${esc(c.img)}" alt="" loading="lazy">` : ""}<span class="th-foot"><span>${esc(fmtDate(c.date))}</span>${presenceHtml(who, 18)}</span></a>`; }).join("") : `<div class="empty-list">Tu pojawią się ostatnio pisane kartki.</div>`}</div>
+        <div class="thumbs">${recent.length ? recent.map((c, hi) => { const s = subject(c.subject); const who = whoOn(c.id); return `<a class="thumb" href="#/c/${c.id}" style="--i:${hi};--rot:${hi % 2 ? 4 : -4}deg"><small>${esc(s ? s.name : "")}${c.kind === "test" ? " · na ocenę" : ""}</small><b>${esc(cardLabel(c))}</b><p>${esc(snippet(c))}</p>${c.img ? `<img src="${esc(c.img)}" alt="" loading="lazy">` : ""}<span class="th-foot"><span>${esc(fmtDate(c.date))}</span>${presenceHtml(who, 18)}</span></a>`; }).join("") : `<div class="empty-list">Tu pojawią się ostatnio pisane kartki.</div>`}</div>
       </section>
     </div>
     <img class="watermark home-wm" src="assets/gzowo-labs-fire.gif" alt="Gzowo Labs">
@@ -279,6 +297,7 @@ export function popMenu(anchor, items) {
   m.className = "pop-menu";
   m.innerHTML = items.map(([label, , cls], i) => `<button data-i="${i}" class="${cls || ""}">${esc(label)}</button>`).join("");
   document.body.appendChild(m);
+  if (m.animate && !matchMedia("(prefers-reduced-motion: reduce)").matches) Array.from(m.children).forEach((c, i) => c.animate([{ opacity: 0, transform: "translateX(-10px)" }, { opacity: 1, transform: "none" }], { duration: 320, delay: 30 + i * 28, easing: "cubic-bezier(.22,1,.36,1)", fill: "backwards" }));
   const r = anchor.getBoundingClientRect();
   m.style.left = Math.min(r.left, window.innerWidth - m.offsetWidth - 8) + "px";
   m.style.top = Math.min(r.bottom + 6, window.innerHeight - m.offsetHeight - 8) + "px";
@@ -301,7 +320,7 @@ export function renderSubject(root, sid, tab) {
   const isTests = tab === "tests";
   root.innerHTML = `${topbar({ back: "#/", title: `<span class="tb-crumb">${esc(s.emoji || "")} ${esc(s.name)}</span>`, right: homeRight() })}
   <main class="subject">
-    <h1 class="page-title">${esc(s.name)}</h1>
+    <h1 class="page-title"><span${vt(VT.title, true)}>${esc(s.name)}</span></h1>
     <div class="subject-head">
       <nav class="tabs"><a href="#/s/${sid}" class="${isTests ? "" : "on"}">Lekcje<small>${lessons.length}</small></a><a href="#/s/${sid}?tab=tests" class="${isTests ? "on" : ""}">Na ocenę<small>${groups.length}</small></a></nav>
       ${isTests ? `<button class="btn primary" data-new-test>${icon("plus", 16)}<span>Nowy test</span></button>` : `<button class="btn primary" data-new-lesson>${icon("plus", 16)}<span>Nowa lekcja</span></button>`}
@@ -310,7 +329,7 @@ export function renderSubject(root, sid, tab) {
       <p class="muted lead">Każdy test to trzy karty, po jednej na osobę. Cudzą kartę można tylko oglądać.</p>
       <div class="rows">${groups.length ? groups.map((g) => `<div class="row test-row"><span class="row-date">${esc(fmtDate(g.date))}</span><span class="row-main"><span class="row-title">${esc(g.name)}</span><span class="row-sub">${esc(g.kind)}</span></span><span class="test-cards">${NAMES.map((n) => { const c = g.cards.find((x) => x.owner === n); const p = users.get(n) || {}; return c ? `<a class="chip ${n === me() ? "mine" : ""}" href="#/c/${c.id}" style="--c:${p.color || "#888"}">${avatarHtml({ name: n, color: p.color, avatar: p.avatar }, 20)}<span>${n}</span>${presenceHtml(whoOn(c.id), 16)}</a>` : ""; }).join("")}</span><button class="icon-btn row-more" data-test-menu="${g.group}" title="Opcje">${icon("more")}</button></div>`).join("") : `<div class="empty-list">Jeszcze nic na ocenę. Nowy test tworzy trzy karty naraz.</div>`}</div>
     ` : `
-      <div class="rows">${lessons.length ? lessons.map((c) => `<a class="row" href="#/c/${c.id}"><span class="row-date">${esc(fmtDate(c.date))}</span><span class="row-main"><span class="row-title">${esc(cardLabel(c))}</span>${snippet(c, 110) && c.title ? `<span class="row-sub">${esc(snippet(c, 110))}</span>` : ""}</span><span class="row-presence">${presenceHtml(whoOn(c.id), 20)}</span><button class="icon-btn row-more" data-card-menu="${c.id}" title="Opcje">${icon("more")}</button></a>`).join("") : `<div class="empty-list">Pusto. Pierwsza lekcja zacznie się od „Temat:”.</div>`}</div>
+      <div class="rows">${lessons.length ? lessons.map((c) => `<a class="row" href="#/c/${c.id}"${vt(VT.page, morphFrom.card === c.id)}><span class="row-date">${esc(fmtDate(c.date))}</span><span class="row-main"><span class="row-title"${vt(VT.ctitle, morphFrom.card === c.id)}>${esc(cardLabel(c))}</span>${snippet(c, 110) && c.title ? `<span class="row-sub">${esc(snippet(c, 110))}</span>` : ""}</span><span class="row-presence">${presenceHtml(whoOn(c.id), 20)}</span><button class="icon-btn row-more" data-card-menu="${c.id}" title="Opcje">${icon("more")}</button></a>`).join("") : `<div class="empty-list">Pusto. Pierwsza lekcja zacznie się od „Temat:”.</div>`}</div>
     `}
   </main>`;
   root.querySelector("main").addEventListener("click", (e) => {

@@ -23,7 +23,14 @@ export function createSlash({ editor, actions }) {
     el.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, c.left)) + "px";
     el.style.top = (c.bottom + h + 12 > window.innerHeight ? c.top - h - 8 : c.bottom + 8) + "px";
   }
-  function show(q, pos) { open = true; render(q); el.classList.add("on"); placeAt(pos); }
+  function show(q, pos) {
+    const was = open;
+    open = true; render(q); el.classList.add("on"); placeAt(pos);
+    if (!was && el.animate && !matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      el.animate([{ opacity: 0, transform: "translateY(-8px) scale(.94)" }, { opacity: 1, transform: "none" }], { duration: 340, easing: "cubic-bezier(.34,1.56,.64,1)" });
+      Array.from(el.children).slice(0, 10).forEach((c, i) => c.animate([{ opacity: 0, transform: "translateX(-12px)" }, { opacity: 1, transform: "none" }], { duration: 360, delay: 20 + i * 24, easing: "cubic-bezier(.22,1,.36,1)", fill: "backwards" }));
+    }
+  }
   function hide() { open = false; manual = false; range = null; el.classList.remove("on"); }
 
   function detect() {

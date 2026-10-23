@@ -34,16 +34,18 @@ export function openCard(root, id) {
   const mobile = matchMedia("(max-width: 900px)").matches;
   let shapeTool = localStorage.getItem("pupka-shape") || "rect";
   let mode = "text";
+  let lastActive = null;
 
   root.innerHTML = `
     <div class="card-view ${isTest ? "is-test" : ""}">
       <header class="cbar">
         <a class="icon-btn back" href="#/s/${c.subject}${isTest ? "?tab=tests" : ""}" title="Wstecz">${icon("back")}</a>
-        <div class="cb-crumb"><a href="#/s/${c.subject}${isTest ? "?tab=tests" : ""}">${esc(sub ? sub.name : "")}</a>${icon("chevronRight", 14)}<span class="card-title">${esc(c.title || (isTest ? c.name : "Nowa lekcja"))}</span></div>
+        <div class="cb-crumb"><a href="#/s/${c.subject}${isTest ? "?tab=tests" : ""}">${esc(sub ? sub.name : "")}</a>${icon("chevronRight", 14)}<span class="card-title" style="view-transition-name:vt-ctitle">${esc(c.title || (isTest ? c.name : "Nowa lekcja"))}</span></div>
         <div class="cb-r"><div class="presence"></div><button class="icon-btn tg ${cursorsHidden ? "" : "on"}" data-ui="cursors" title="${cursorsHidden ? "Pokaż kursory innych" : "Schowaj kursory innych"}">${icon(cursorsHidden ? "eyeOff" : "eye")}</button><button class="icon-btn tg" data-ui="breaks" title="Pokaż granice stron A4">${icon("pages")}</button><button class="icon-btn tg" data-ui="grid" title="Siatka do rysowania (nie drukuje się)">${icon("grid")}</button></div>
       </header>
       <div class="card-body">
         <nav class="rail">
+          <span class="rail-ind" aria-hidden="true"></span>
           <button data-mode="text" class="on" title="Pisanie (Esc)">${icon("text")}</button>
           ${canEdit ? `<button data-insert title="Wstaw: obrazek, tabela, wzór, ramka… (albo wpisz / na początku linii)">${icon("plus")}</button>` : ""}
           <span class="rsep"></span>
@@ -64,7 +66,7 @@ export function openCard(root, id) {
           ${isTest && canEdit ? `<span class="rsep"></span><button data-cmd="signature" title="Wstaw mój podpis">${icon("sign")}</button>` : ""}
         </nav>
         <div class="workspace">
-          <div class="page">
+          <div class="page" style="view-transition-name:vt-page">
             <div class="page-head">${esc(fmtDateLong(c.date))}</div>
             <div class="editor" lang="pl"></div>
             <div class="page-breaks"></div>
@@ -159,7 +161,20 @@ export function openCard(root, id) {
     const sz = rail.querySelector(".r-size i"); sz.style.width = sz.style.height = 4 + s.size * 1.6 + "px";
     rail.querySelector(".r-del").classList.toggle("show", !!s.selection);
     view.classList.toggle("has-sel", !!s.selection);
+    moveIndicator();
   }
+  function moveIndicator() {
+    const ind = rail.querySelector(".rail-ind"), b = rail.querySelector("button.on[data-mode], button.on[data-tool]");
+    if (!ind || !b) return;
+    ind.style.transform = `translate(${b.offsetLeft}px, ${b.offsetTop}px)`;
+    if (lastActive && lastActive !== b && b.animate) {
+      b.animate([{ transform: "scale(1)" }, { transform: "scale(.82) rotate(-6deg)", offset: .3 }, { transform: "scale(1.12) rotate(3deg)", offset: .65 }, { transform: "scale(1)" }], { duration: 480, easing: "cubic-bezier(.34,1.56,.64,1)" });
+      ind.animate([{ scale: "1 1" }, { scale: "1.08 .92", offset: .4 }, { scale: "1 1" }], { duration: 460, easing: "ease-out" });
+    }
+    if (!lastActive) requestAnimationFrame(() => ind.classList.add("ready"));
+    lastActive = b;
+  }
+  window.addEventListener("resize", moveIndicator);
   syncDrawUi(draw.getState());
 
   function pickTool(t) { if (mode !== "draw") setMode("draw"); draw.setTool(t); }
@@ -501,6 +516,7 @@ export function openCard(root, id) {
   return {
     destroy() {
       document.removeEventListener("keydown", onKey);
+      window.removeEventListener("resize", moveIndicator);
       document.removeEventListener("keyup", onKeyUp);
       window.removeEventListener("beforeprint", onBeforePrint);
       window.removeEventListener("afterprint", onAfterPrint);

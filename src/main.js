@@ -3,6 +3,7 @@
 import { connectIndex, resetLocalIfNeeded, onChange, me, setMe, purgeOld, NAMES, card, state, warmCard, users, touchSubject } from "./store.js";
 import { renderPicker, renderHome, renderSubject, renderPlan, renderTrash, renderSettings, openSearch } from "./home.js";
 import { openCard } from "./card.js";
+import { from, transition } from "./morph.js";
 
 const root = document.getElementById("app");
 await resetLocalIfNeeded();
@@ -11,6 +12,7 @@ let current = null;
 let currentKey = "";
 let picking = false;
 let routeToken = 0;
+let deferTimer = 0;
 
 provider.once("sync", () => { setTimeout(purgeOld, 2000); });
 
@@ -38,7 +40,9 @@ function route(force) {
     const id = parts[1];
     root.innerHTML = `<div class="empty">Ładuję kartę…</div>`;
     current = { destroy() {}, pending: true };
-    warmCard(id).then(() => { if (token === routeToken && me()) current = openCard(root, id); });
+    const ready = warmCard(id).then(() => { if (token === routeToken && me()) current = openCard(root, id); });
+    window.scrollTo(0, 0);
+    return Promise.race([ready, new Promise((r) => setTimeout(r, 700))]);
   }
   else if (parts[0] === "s" && parts[1]) renderSubject(root, parts[1], q.tab);
   else if (parts[0] === "plan") renderPlan(root);
@@ -56,7 +60,13 @@ function pick() {
   renderPicker(root, () => { picking = false; route(true); });
 }
 
-window.addEventListener("hashchange", () => route(false));
+window.addEventListener("hashchange", () => {
+  if (!me() || picking) return;
+  const old = (currentKey || "").replace(/^#\/?/, "").split("?")[0].split("/").filter(Boolean);
+  from.card = old[0] === "c" ? old[1] : null;
+  from.subject = old[0] === "s" ? old[1] : old[0] === "c" && card(old[1]) ? card(old[1]).subject : null;
+  transition(() => route(false));
+});
 onChange((kind) => {
   if (picking) return;
   if (me() && state.indexProvider.synced && !(users.get(me()) || {}).color) { pick(); return; }
@@ -65,6 +75,7 @@ onChange((kind) => {
   const active = document.activeElement;
   if (active && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName) && !active.closest(".search")) return;
   if (document.querySelector(".modal-bg, .pop-menu")) return;
+  if (document.body.classList.contains("home-enter")) { clearTimeout(deferTimer); deferTimer = setTimeout(() => route(true), 1900); return; }
   route(true);
 });
 window.addEventListener("pupka:search", openSearch);
@@ -76,7 +87,11 @@ document.addEventListener("keydown", (e) => {
 root.innerHTML = `<div class="empty">Ładuję…</div>`;
 await state.ready;
 const saved = sessionStorage.getItem("pupka-me");
-if (saved && NAMES.includes(saved) && (users.get(saved) || {}).color) { setMe(saved); route(true); } else pick();
+if (saved && NAMES.includes(saved) && (users.get(saved) || {}).color) {
+  setMe(saved);
+  if (!parse().parts.length) { document.body.classList.add("home-enter"); setTimeout(() => document.body.classList.remove("home-enter"), 1800); }
+  route(true);
+} else pick();
 
 window.addEventListener("beforeprint", () => document.body.classList.add("printing"));
 window.addEventListener("afterprint", () => document.body.classList.remove("printing"));
