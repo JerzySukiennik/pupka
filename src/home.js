@@ -14,45 +14,118 @@ function plural(n, a, b, c) { if (n === 1) return a; const m = n % 10, h = n % 1
 export function renderPicker(root, onPicked) {
   const el = document.createElement("div");
   el.className = "picker";
-  const draw = () => {
-    el.innerHTML = `<div class="picker-box"><div class="wordmark">Pupka</div><div class="picker-sub">Kto pisze?</div><div class="picker-tiles">${NAMES.map((n) => {
-      const p = users.get(n) || {};
-      const c = p.color || PALETTE[NAMES.indexOf(n)];
-      return `<button class="tile ${p.color ? "" : "fresh"}" data-name="${n}" style="--c:${c}">${avatarHtml({ name: n, color: c, avatar: p.avatar }, 96)}<span class="tile-name">${n}</span>${p.color ? "" : `<span class="tile-hint">pierwszy raz: ustaw kolor i zdjęcie</span>`}</button>`;
-    }).join("")}</div><div class="picker-net">${state.online ? "połączono" : "łączę, offline też działa"}</div><img class="watermark picker-wm" src="assets/gzowo-labs-fire.gif" alt="Gzowo Labs"></div>`;
-  };
+  const d = new Date(), h = d.getHours();
+  const greet = h < 5 ? "Późno już" : h < 11 ? "Dzień dobry" : h < 18 ? "Cześć" : "Dobry wieczór";
+  const now = nowLesson();
+  const tilt = matchMedia("(hover: hover) and (pointer: fine)").matches;
+  const colorOfTile = (n) => (users.get(n) || {}).color || PALETTE[NAMES.indexOf(n)];
+  const onlineNames = () => new Set(presence().map((s) => s.user && s.user.name).filter(Boolean));
+  function tileHtml(n, i) {
+    const p = users.get(n) || {};
+    return `<button class="tile ${p.color ? "" : "fresh"}" data-name="${n}" style="--c:${colorOfTile(n)};--i:${i};--r:${[-3, 0, 3][i] || 0}deg"><span class="tile-card"><span class="tile-top"><kbd>${i + 1}</kbd><span class="tile-live"><i></i>jest w Pupce</span></span><span class="tile-av">${avatarHtml({ name: n, color: colorOfTile(n), avatar: p.avatar }, 92)}</span><span class="tile-name">${n}</span><span class="tile-meta">${p.color ? `Wejdź${icon("chevronRight", 14)}` : "Pierwszy raz: kolor i zdjęcie"}</span></span></button>`;
+  }
+  function draw() {
+    el.classList.remove("setup-mode");
+    el.innerHTML = `<div class="picker-box">
+      <div class="pk-kicker">${esc(WEEKDAYS[d.getDay()])} · ${esc(fmtDateLong(today()))}${now && now.subject ? ` · teraz ${esc(now.subject.name)}` : ""}</div>
+      <h1 class="wordmark" aria-label="Pupka">${"Pupka".split("").map((c, i) => `<span style="--i:${i}">${c}</span>`).join("")}</h1>
+      <p class="picker-sub">${greet}. Kto dziś pisze?</p>
+      <div class="picker-tiles">${NAMES.map(tileHtml).join("")}</div>
+      <div class="picker-foot"><span class="net"></span><span class="pk-net"></span>${tilt ? `<span class="pk-sep">·</span><span>wybierz klawiszem 1, 2 albo 3</span>` : ""}</div>
+      <img class="watermark picker-wm" src="assets/gzowo-labs-fire.gif" alt="Gzowo Labs">
+    </div>`;
+    patch();
+  }
+  function patch() {
+    const on = onlineNames();
+    el.querySelectorAll(".tile").forEach((t) => {
+      const n = t.dataset.name, p = users.get(n) || {};
+      t.style.setProperty("--c", colorOfTile(n));
+      t.classList.toggle("fresh", !p.color);
+      t.classList.toggle("online", on.has(n));
+      const av = t.querySelector(".tile-av");
+      const html = avatarHtml({ name: n, color: colorOfTile(n), avatar: p.avatar }, 92);
+      if (av && av.dataset.html !== html) { av.innerHTML = html; av.dataset.html = html; }
+      const meta = t.querySelector(".tile-meta");
+      if (meta) meta.innerHTML = p.color ? `Wejdź${icon("chevronRight", 14)}` : "Pierwszy raz: kolor i zdjęcie";
+    });
+    const net = el.querySelector(".picker-foot .net"), txt = el.querySelector(".pk-net");
+    if (net) net.classList.toggle("on", !!state.online);
+    if (txt) txt.textContent = state.online ? "połączono" : "łączę, offline też działa";
+  }
   draw();
-  const obs = () => { if (!el.querySelector(".setup")) draw(); else { const n = el.querySelector(".picker-net"); if (n) n.textContent = state.online ? "połączono" : "łączę, offline też działa"; } };
+  const obs = () => { if (!el.classList.contains("setup-mode")) patch(); };
   users.observe(obs);
-  const offStatus = onChange((k) => { if (k === "status") obs(); });
+  const offStatus = onChange(() => obs());
+  let leaving = false;
+  function choose(name) {
+    if (leaving) return;
+    const t = el.querySelector(`.tile[data-name="${name}"]`);
+    if (!t) return;
+    leaving = true;
+    const p = users.get(name) || {};
+    t.classList.add("picked");
+    el.querySelectorAll(".tile").forEach((x) => { if (x !== t) x.classList.add("away"); });
+    el.classList.add(p.color ? "leaving" : "to-setup");
+    setTimeout(() => {
+      if (p.color) { el.classList.add("gone"); setTimeout(() => finish(name), 220); }
+      else { leaving = false; setup(name); }
+    }, p.color ? 380 : 420);
+  }
   el.addEventListener("click", (e) => {
     const t = e.target.closest(".tile");
-    if (!t) return;
-    const name = t.dataset.name;
-    const p = users.get(name) || {};
-    if (p.color) { finish(name); return; }
-    setup(name);
+    if (t && !el.classList.contains("setup-mode")) choose(t.dataset.name);
   });
-  function finish(name) { users.unobserve(obs); offStatus(); el.remove(); setMe(name); onPicked(); }
+  if (tilt) {
+    el.addEventListener("pointermove", (e) => {
+      const t = e.target.closest(".tile");
+      el.querySelectorAll(".tile.tilting").forEach((x) => { if (x !== t) { x.classList.remove("tilting"); x.style.removeProperty("--rx"); x.style.removeProperty("--ry"); } });
+      if (!t || leaving) return;
+      const r = t.getBoundingClientRect();
+      const x = (e.clientX - r.left) / r.width - 0.5, y = (e.clientY - r.top) / r.height - 0.5;
+      t.classList.add("tilting");
+      t.style.setProperty("--ry", (x * 12).toFixed(2) + "deg");
+      t.style.setProperty("--rx", (-y * 10).toFixed(2) + "deg");
+    });
+    el.addEventListener("pointerleave", () => el.querySelectorAll(".tile.tilting").forEach((x) => { x.classList.remove("tilting"); x.style.removeProperty("--rx"); x.style.removeProperty("--ry"); }));
+  }
+  const onKey = (e) => {
+    if (el.classList.contains("setup-mode")) { if (e.key === "Escape") { e.preventDefault(); draw(); } return; }
+    const i = ["1", "2", "3"].indexOf(e.key);
+    if (i >= 0 && !e.metaKey && !e.ctrlKey) { e.preventDefault(); choose(NAMES[i]); }
+  };
+  document.addEventListener("keydown", onKey);
+  function finish(name) {
+    users.unobserve(obs); offStatus(); document.removeEventListener("keydown", onKey);
+    el.remove(); setMe(name);
+    document.body.classList.add("home-enter");
+    setTimeout(() => document.body.classList.remove("home-enter"), 1200);
+    onPicked();
+  }
   function setup(name) {
+    el.classList.remove("to-setup");
+    el.classList.add("setup-mode");
     const box = el.querySelector(".picker-box");
     let color = PALETTE[NAMES.indexOf(name)] || PALETTE[0];
     let avatar = null;
-    box.innerHTML = `<div class="wordmark">Cześć, ${name}</div><div class="picker-sub">Pierwszy raz: kolor i zdjęcie. Potem już tylko klikasz.</div>
-      <div class="setup">
-        <div class="avatar-pick" style="--c:${color}">${avatarHtml({ name, color }, 112)}<input type="file" accept="image/*,.gif" hidden><button type="button" class="btn upload-btn">${icon("image", 16)}<span>Wgraj zdjęcie lub gif</span></button></div>
-        <div class="swatches big">${PALETTE.map((c) => `<button data-color="${c}" style="--c:${c}" class="${c === color ? "on" : ""}" title="Kolor"></button>`).join("")}</div>
+    box.innerHTML = `<div class="setup-card" style="--c:${color}">
+        <div class="pk-kicker">pierwszy raz w Pupce</div>
+        <h2 class="setup-title">Cześć, ${esc(name)}</h2>
+        <p class="picker-sub">Wybierz kolor i zdjęcie. Potem wystarczy jedno kliknięcie.</p>
+        <div class="avatar-pick" style="--c:${color}"><span class="av-wrap">${avatarHtml({ name, color }, 116)}<span class="av-cam">${icon("camera", 18)}</span></span><input type="file" accept="image/*,.gif" hidden><button type="button" class="btn small upload-btn">${icon("image", 14)}<span>Wgraj zdjęcie lub gif</span></button></div>
+        <div class="swatches big">${PALETTE.map((c, i) => `<button data-color="${c}" style="--c:${c};--i:${i}" class="${c === color ? "on" : ""}" title="Kolor"></button>`).join("")}</div>
         <input class="fullname" placeholder="Imię i nazwisko do kartkówek" value="${esc((users.get(name) || {}).fullName || "")}">
-        <button class="btn primary done">Gotowe</button>
+        <div class="setup-actions"><button class="btn ghost back-btn">${icon("back", 15)}<span>Wróć</span></button><button class="btn primary big done">Gotowe${icon("chevronRight", 16)}</button></div>
       </div>`;
+    const card = box.querySelector(".setup-card");
     const pick = box.querySelector(".avatar-pick");
     const file = pick.querySelector("input");
-    pick.addEventListener("click", (e) => { if (e.target.closest(".avatar, .upload-btn")) file.click(); });
+    pick.addEventListener("click", (e) => { if (e.target.closest(".av-wrap, .upload-btn")) file.click(); });
     file.addEventListener("change", async () => {
       const f = file.files[0];
       if (!f) return;
       pick.classList.add("busy");
-      const label = pick.querySelector(".upload-btn span"); label.textContent = "Wgrywam…"; try { avatar = await uploadImage(f, name, 320); pick.querySelector(".avatar").innerHTML = `<img src="${avatar}" alt="">`; label.textContent = "Zmień zdjęcie lub gif"; } catch (e) { label.textContent = "Wgraj zdjęcie lub gif"; alert("Nie udało się wgrać: " + e.message); }
+      const label = pick.querySelector(".upload-btn span"); label.textContent = "Wgrywam…"; try { avatar = await uploadImage(f, name, 320); pick.querySelector(".avatar").innerHTML = `<img src="${avatar}" alt="">`; label.textContent = "Zmień zdjęcie lub gif"; } catch (err) { label.textContent = "Wgraj zdjęcie lub gif"; alert("Nie udało się wgrać: " + err.message); }
       pick.classList.remove("busy");
     });
     box.querySelector(".swatches").addEventListener("click", (e) => {
@@ -60,14 +133,19 @@ export function renderPicker(root, onPicked) {
       if (!b) return;
       color = b.dataset.color;
       box.querySelectorAll("[data-color]").forEach((x) => x.classList.toggle("on", x === b));
+      card.style.setProperty("--c", color);
       pick.style.setProperty("--c", color);
       pick.querySelector(".avatar").style.setProperty("--c", color);
     });
-    box.querySelector(".done").addEventListener("click", () => {
+    box.querySelector(".back-btn").addEventListener("click", () => draw());
+    const done = () => {
       const prev = users.get(name) || {};
       users.set(name, Object.assign({}, prev, { color, avatar: avatar || prev.avatar || null, fullName: box.querySelector(".fullname").value.trim() || name }));
-      finish(name);
-    });
+      el.classList.add("gone");
+      setTimeout(() => finish(name), 240);
+    };
+    box.querySelector(".done").addEventListener("click", done);
+    box.querySelector(".fullname").addEventListener("keydown", (e) => { if (e.key === "Enter") done(); });
   }
   root.appendChild(el);
 }
