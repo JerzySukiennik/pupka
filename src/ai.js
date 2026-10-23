@@ -82,6 +82,11 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
       <button type="submit" class="isl-send" title="Wyślij (Enter)">${icon("up", 17)}</button>
       <button type="button" class="isl-stop" title="Zatrzymaj (Esc)"><i></i><span>Zatrzymaj</span></button>
     </form>`;
+  const tip = document.createElement("button");
+  tip.type = "button";
+  tip.className = "isl-tip";
+  container.after(tip);
+  tip.addEventListener("click", () => { if (busy) stop(); else { pinned = true; setOpen(true); ta.focus(); } });
   const body = container.querySelector(".isl-body");
   const msgs = container.querySelector(".ai-msgs");
   const form = container.querySelector(".isl-bar");
@@ -95,13 +100,15 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
     const was = container.classList.contains("open");
     container.classList.toggle("open", !!v);
     document.body.classList.toggle("ai-open", !!v);
-    if (v && !was) { unread = false; paintPeek(); requestAnimationFrame(() => { msgs.scrollTop = msgs.scrollHeight; }); }
+    if (v && !was) { unread = false; requestAnimationFrame(() => { msgs.scrollTop = msgs.scrollHeight; }); }
+    if (v !== was) paintPeek();
   }
   let closeTimer = 0;
   function maybeClose() { clearTimeout(closeTimer); closeTimer = setTimeout(() => { if (!wantsOpen()) setOpen(false); }, 380); }
   if (HOVER) {
-    container.addEventListener("pointerenter", () => { hovering = true; clearTimeout(closeTimer); setOpen(true); });
-    container.addEventListener("pointerleave", () => { hovering = false; maybeClose(); });
+    let openTimer = 0;
+    container.addEventListener("pointerenter", () => { hovering = true; clearTimeout(closeTimer); clearTimeout(openTimer); openTimer = setTimeout(() => { if (hovering) setOpen(true); }, 130); });
+    container.addEventListener("pointerleave", () => { hovering = false; clearTimeout(openTimer); maybeClose(); });
   }
   container.addEventListener("click", (e) => { if (!container.classList.contains("open") && !e.target.closest(".isl-stop")) { pinned = true; setOpen(true); ta.focus(); } });
   ta.addEventListener("focus", () => setOpen(true));
@@ -114,6 +121,9 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
     container.classList.toggle("busy", busy);
     container.classList.toggle("unread", unread && !busy);
     peek.textContent = busy ? (stepText || "Myślę…") : unread ? "Nowa odpowiedź AI" : "Zapytaj AI";
+    const open = container.classList.contains("open");
+    tip.classList.toggle("on", !open && (busy || unread));
+    tip.innerHTML = busy ? `<i class="spin"></i><span>${esc(stepText || "Myślę…")}</span><b title="Zatrzymaj (Esc)"></b>` : `<span>Nowa odpowiedź AI</span>`;
   }
 
   function paintAttach() {
@@ -341,7 +351,7 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
     },
     isOpen() { return container.classList.contains("open"); },
     focus() { ta.focus(); },
-    destroy() { chat.unobserve(render); stop(); document.removeEventListener("pointerdown", onDocDown, true); clearTimeout(closeTimer); }
+    destroy() { chat.unobserve(render); stop(); document.removeEventListener("pointerdown", onDocDown, true); clearTimeout(closeTimer); tip.remove(); }
   };
   return api;
 }

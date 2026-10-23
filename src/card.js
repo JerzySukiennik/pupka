@@ -431,7 +431,7 @@ export function openCard(root, id) {
     const states = [];
     entry.provider.awareness.getStates().forEach((s, cid) => { if (cid !== entry.doc.clientID && s.user) states.push(s); });
     const aiBy = states.find((s) => s.ai) || (entry.provider.awareness.getLocalState() || {}).ai ? true : false;
-    presenceEl.innerHTML = presenceHtml(states.map((s) => s.user), 26) + (aiBy ? `<span class="ai-typing" title="AI pracuje">${icon("sparkle", 14)}</span>` : "") + `<span class="net ${state.online ? "on" : ""}" title="${state.online ? "połączono" : "offline, zmiany zapiszą się po powrocie sieci"}"></span>`;
+    presenceEl.innerHTML = presenceHtml(states.map((s) => s.user), 26) + (aiBy ? `<span class="ai-typing" title="AI pracuje">${icon("sparkle", 14)}</span>` : "") + (state.online ? "" : `<span class="offline-pill" title="Zmiany zapiszą się, gdy wróci sieć">${icon("offline", 14)}<span>offline</span></span>`);
   }
   entry.provider.awareness.on("change", renderPresence);
   const offStatus = onChange((k) => { if (k === "status") renderPresence(); });

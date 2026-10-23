@@ -6,6 +6,7 @@ import { topbar, avatarHtml, presenceHtml } from "./ui.js";
 import { icon } from "./icons.js";
 import { esc } from "./md.js";
 import { userWords, removeUserWord, spellStatus, loadSpeller, reloadSpeller } from "./spell.js";
+import { SLOTS, DAY_NAMES, WEEK, lessonsOn, lessonNow, sameOptions } from "./timetable.js";
 
 const WEEKDAYS = ["niedziela", "poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota"];
 function go(hash) { location.hash = hash; }
@@ -16,7 +17,7 @@ export function renderPicker(root, onPicked) {
   el.className = "picker";
   const d = new Date(), h = d.getHours();
   const greet = h < 5 ? "Późno już" : h < 11 ? "Dzień dobry" : h < 18 ? "Cześć" : "Dobry wieczór";
-  const now = nowLesson();
+  const now = lessonNow();
   const tilt = matchMedia("(hover: hover) and (pointer: fine)").matches;
   const colorOfTile = (n) => (users.get(n) || {}).color || PALETTE[NAMES.indexOf(n)];
   const onlineNames = () => new Set(presence().map((s) => s.user && s.user.name).filter(Boolean));
@@ -27,11 +28,11 @@ export function renderPicker(root, onPicked) {
   function draw() {
     el.classList.remove("setup-mode");
     el.innerHTML = `<div class="picker-box">
-      <div class="pk-kicker">${esc(WEEKDAYS[d.getDay()])} · ${esc(fmtDateLong(today()))}${now && now.subject ? ` · teraz ${esc(now.subject.name)}` : ""}</div>
+      <div class="pk-kicker">${esc(WEEKDAYS[d.getDay()])} · ${esc(fmtDateLong(today()))}${now ? ` · ${esc(now.choices[0].when)} ${esc(now.choices.filter((c) => c.when === now.choices[0].when).map((c) => c.label).join(" albo "))}` : ""}</div>
       <h1 class="wordmark" aria-label="Pupka">${"Pupka".split("").map((c, i) => `<span style="--i:${i}">${c}</span>`).join("")}</h1>
       <p class="picker-sub">${greet}. Kto dziś pisze?</p>
       <div class="picker-tiles">${NAMES.map(tileHtml).join("")}</div>
-      <div class="picker-foot"><span class="net"></span><span class="pk-net"></span>${tilt ? `<span class="pk-sep">·</span><span>wybierz klawiszem 1, 2 albo 3</span>` : ""}</div>
+      <div class="picker-foot"><span class="pk-net"></span>${tilt ? `<span>wybierz klawiszem 1, 2 albo 3</span>` : ""}</div>
       <img class="watermark picker-wm" src="assets/gzowo-labs-fire.gif" alt="Gzowo Labs">
     </div>`;
     patch();
@@ -49,9 +50,8 @@ export function renderPicker(root, onPicked) {
       const meta = t.querySelector(".tile-meta");
       if (meta) meta.innerHTML = p.color ? `Wejdź${icon("chevronRight", 14)}` : "Pierwszy raz: kolor i zdjęcie";
     });
-    const net = el.querySelector(".picker-foot .net"), txt = el.querySelector(".pk-net");
-    if (net) net.classList.toggle("on", !!state.online);
-    if (txt) txt.textContent = state.online ? "połączono" : "łączę, offline też działa";
+    const txt = el.querySelector(".pk-net");
+    if (txt) { txt.textContent = state.online ? "" : "offline, wszystko zapisze się po powrocie sieci ·"; txt.hidden = !!state.online; }
   }
   draw();
   const obs = () => { if (!el.classList.contains("setup-mode")) patch(); };
@@ -153,7 +153,7 @@ export function renderPicker(root, onPicked) {
 function homeRight() {
   const p = myProfile();
   const online = presence().map((s) => s.user);
-  return `<button class="search-pill" data-go="#/search" title="Szukaj we wszystkich notatkach (Cmd+K)">${icon("search", 15)}<span>Szukaj</span><kbd>⌘K</kbd></button>${presenceHtml(online, 26)}<span class="net ${state.online ? "on" : ""}" title="${state.online ? "połączono" : "offline"}"></span><button class="icon-btn" data-go="#/settings" title="Ustawienia">${icon("settings2")}</button><button class="me-btn" data-go="#/switch" title="Zmień osobę">${avatarHtml({ name: me(), color: p.color, avatar: p.avatar }, 30)}</button>`;
+  return `<button class="search-pill" data-go="#/search" title="Szukaj we wszystkich notatkach (Cmd+K)">${icon("search", 15)}<span>Szukaj</span><kbd>⌘K</kbd></button>${presenceHtml(online, 26)}${state.online ? "" : `<span class="offline-pill" title="Zmiany zapiszą się, gdy wróci sieć">${icon("offline", 14)}<span>offline</span></span>`}<button class="icon-btn" data-go="#/settings" title="Ustawienia">${icon("settings2")}</button><button class="me-btn" data-go="#/switch" title="Zmień osobę">${avatarHtml({ name: me(), color: p.color, avatar: p.avatar }, 30)}</button>`;
 }
 function navHtml(on) {
   return [["#/", "Dziś", "home"], ["#/plan", "Plan lekcji", "plan"], ["#/trash", "Kosz", "trash"]].map(([h, t, k]) => `<a href="${h}" class="${k === on ? "on" : ""}">${t}</a>`).join("");
@@ -163,44 +163,49 @@ function whoOn(cardId) { return presence().filter((s) => s.card === cardId).map(
 function whoOnSubject(sid) { const ids = new Set(listCards(sid).map((c) => c.id)); return presence().filter((s) => s.card && ids.has(s.card)).map((s) => s.user); }
 function snippet(c, n = 150) { const t = (c.text || "").replace(/^\s*temat\s*:[^\n]*\n?/i, "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n).replace(/\s\S*$/, "") + "…" : t; }
 function cardLabel(c) { return c.title || c.name || snippet(c, 60) || "bez tematu"; }
-function todaySlots() {
-  const d = new Date(), day = d.getDay();
-  if (day < 1 || day > 5) return [];
-  const mins = d.getHours() * 60 + d.getMinutes();
-  const now = nowLesson();
-  return hours().map((h, i) => {
-    const sid = plan.get(`${day}-${i}`);
-    const s = sid ? subject(sid) : null;
-    if (!s || s.deleted) return null;
-    const [hh, mm] = h.split(":").map(Number);
-    const cur = now && now.slot === i;
-    return { i, h, s, cur, past: !cur && hh * 60 + mm + 45 < mins };
-  }).filter(Boolean);
+function todayChips() {
+  const d = new Date();
+  const t = d.getHours() * 60 + d.getMinutes();
+  const m = (hm) => { const [h, mm] = hm.split(":").map(Number); return h * 60 + mm; };
+  const merged = [];
+  for (const l of lessonsOn(d.getDay())) { const last = merged[merged.length - 1]; if (last && sameOptions(last, l) && last.lastSlot === l.i - 1) { last.end = l.end; last.lastSlot = l.i; } else merged.push(Object.assign({}, l, { lastSlot: l.i })); }
+  return merged.map((l) => Object.assign(l, { cur: t >= m(l.start) && t < m(l.end), past: t >= m(l.end) }));
+}
+function subjectState(sub) {
+  const lessons = listCards(sub.id, "lesson");
+  return { todayCard: lessons.find((c) => c.date === today()), last: lessons[0] };
 }
 
 export function renderHome(root) {
-  const now = nowLesson();
+  const now = lessonNow();
   const ranked = rankedSubjects();
   const subs = listSubjects();
-  const heroSub = now && now.subject ? now.subject : ranked[0];
-  const isNow = !!(now && now.subject);
-  const lessons = heroSub ? listCards(heroSub.id, "lesson") : [];
-  const todayCard = lessons.find((c) => c.date === today());
-  const last = lessons[0];
+  const pupkaChoices = now ? now.choices.filter((c) => c.sub) : [];
+  const otherChoices = now ? now.choices.filter((c) => !c.sub) : [];
+  const choiceMode = pupkaChoices.length > 1 || (pupkaChoices.length === 1 && otherChoices.length > 0);
+  const heroSub = pupkaChoices.length === 1 && !choiceMode ? pupkaChoices[0].sub : ranked[0];
+  const isNow = pupkaChoices.length === 1 && !choiceMode;
+  const { todayCard, last } = heroSub ? subjectState(heroSub) : {};
   const inside = heroSub ? whoOnSubject(heroSub.id) : [];
-  const slots = todaySlots();
+  const chips = todayChips();
   const d = new Date();
   const recent = allCards().filter((c) => c.kind === "lesson" || c.owner === me()).sort((a, b) => (b.updated || b.created || 0) - (a.updated || a.created || 0)).slice(0, 6);
-  const kicker = isNow ? `Teraz · ${now.slot + 1}. lekcja · ${esc(now.time)}` : `${esc(WEEKDAYS[d.getDay()])} · ${esc(fmtDateLong(today()))}`;
+  const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1);
+  const kicker = isNow ? `${cap(pupkaChoices[0].when)} · ${pupkaChoices[0].slot}. lekcja · ${pupkaChoices[0].start}-${pupkaChoices[0].end}` : now && !pupkaChoices.length ? `Teraz ${esc(now.choices.map((c) => c.label).join(" albo "))} · ostatnio otwierane` : `${esc(WEEKDAYS[d.getDay()])} · ${esc(fmtDateLong(today()))}`;
   const lead = heroSub ? (todayCard ? `Dzisiejsza karta już jest${todayCard.title ? `: ${esc(todayCard.title)}` : ""}.` : last ? `Ostatnio: ${esc(cardLabel(last))}.` : "Jeszcze nie ma tu żadnej lekcji.") : "";
+  const choiceHtml = choiceMode ? `<section class="hero choice-hero">
+      <div class="kicker">Do wyboru · ${esc(WEEKDAYS[d.getDay()])}</div>
+      <div class="choices">${pupkaChoices.map((c, i) => { const st = subjectState(c.sub); const who = whoOnSubject(c.sub.id); return `<button class="choice" data-pick="${c.sub.id}" style="--i:${i}"><small>${esc(c.when)} · ${c.start}-${c.end}</small><span class="choice-name">${esc(c.sub.name)}</span><span class="choice-meta">${st.todayCard ? "dzisiejsza karta już jest" : st.last ? "ostatnio: " + esc(cardLabel(st.last)) : "jeszcze pusto"}${who.length ? " " + presenceHtml(who, 18) : ""}</span><span class="choice-go">${icon("write", 15)}${st.todayCard ? "Otwórz" : "Zacznij"}</span></button>`; }).join("")}</div>
+      ${otherChoices.length ? `<p class="choice-other">albo ${esc(otherChoices.map((c) => c.label).join(", "))}, poza Pupką</p>` : ""}
+    </section>` : "";
   root.innerHTML = `${topbar({ title: "", right: homeRight(), nav: navHtml("home") })}
   <main class="home">
-    ${heroSub ? `<section class="hero">
+    ${choiceMode ? choiceHtml : heroSub ? `<section class="hero">
       <h1 class="hero-name">${esc(heroSub.name)}</h1>
       <div class="hero-side"><div class="kicker">${kicker}</div><p>${lead}${inside.length ? ` <span class="live-in">${presenceHtml(inside, 20)} ${esc(inside.map((u) => u.name).join(", "))} ${inside.length > 1 ? "piszą" : "pisze"} teraz</span>` : ""}</p>
         <div class="hero-go">${todayCard ? `<button class="btn primary big" data-open="${todayCard.id}">${icon("write", 16)}<span>Otwórz dzisiejszą lekcję</span></button>` : `<button class="btn primary big" data-new-lesson="${heroSub.id}">${icon("write", 16)}<span>${isNow ? "Zacznij dzisiejszą lekcję" : "Nowa lekcja"}</span></button>`}${!todayCard && last ? `<button class="btn big" data-open="${last.id}">Ostatnia lekcja</button>` : ""}<a class="btn big ghost" href="#/s/${heroSub.id}">Wszystkie</a></div></div>
     </section>` : `<section class="hero"><h1 class="hero-name">Pupka</h1><div class="hero-side"><p>Dodaj pierwszy przedmiot, a potem wpisz plan lekcji.</p><div class="hero-go"><button class="btn primary big" data-new-subject>${icon("plus", 16)}<span>Nowy przedmiot</span></button></div></div></section>`}
-    <div class="plan-chips">${slots.length ? slots.map((x) => `<a href="#/s/${x.s.id}" class="${x.cur ? "cur" : x.past ? "past" : ""}"><b>${esc(x.h)}</b>${esc(x.s.name)}</a>`).join("") : `<a href="#/plan" class="quiet">${icon("calendar", 14)}<span>${plan.size ? "Dziś wolne. Plan lekcji" : "Wpisz plan lekcji, a Pupka sama otworzy właściwy przedmiot"}</span></a>`}</div>
+    <div class="plan-chips">${chips.length ? chips.map((x) => `<span class="pc ${x.cur ? "cur" : x.past ? "past" : ""}"><b>${esc(x.start)}</b>${x.options.map((o) => (o.sub ? `<a href="#/s/${o.sub.id}">${esc(o.label)}</a>` : `<span>${esc(o.label)}</span>`)).join("<i>/</i>")}</span>`).join("") : `<a href="#/plan" class="pc quiet">${icon("calendar", 14)}<span>Dziś bez lekcji · plan tygodnia</span></a>`}</div>
     <div class="home-cols">
       <section class="toc"><h2>Przedmioty</h2>
         ${subs.map((s) => { const n = listCards(s.id, "lesson").length; const who = whoOnSubject(s.id); return `<div class="toc-row"><a href="#/s/${s.id}" class="toc-link"><span class="toc-name">${esc(s.name)}</span><span class="toc-dots"></span>${who.length ? presenceHtml(who, 18) : ""}<span class="toc-n">${n}</span></a><button class="icon-btn toc-add" data-new-lesson="${s.id}" title="Nowa lekcja z ${esc(s.name)}">${icon("plus", 15)}</button><button class="icon-btn toc-more" data-subject-menu="${s.id}" title="Opcje">${icon("more", 15)}</button></div>`; }).join("")}
@@ -217,6 +222,7 @@ export function renderHome(root) {
     if (!b) return;
     e.preventDefault();
     if (b.dataset.open) go("#/c/" + b.dataset.open);
+    else if (b.dataset.pick) { const st = subjectState(subject(b.dataset.pick)); go("#/c/" + (st.todayCard ? st.todayCard.id : createLesson(b.dataset.pick))); }
     else if (b.dataset.newLesson) go("#/c/" + createLesson(b.dataset.newLesson));
     else if (b.dataset.go) go(b.dataset.go);
     else if (b.hasAttribute("data-new-subject")) newSubjectDialog();
@@ -323,17 +329,12 @@ export function renderSubject(root, sid, tab) {
 }
 
 export function renderPlan(root) {
-  const hs = hours();
-  const subs = listSubjects();
-  const now = nowLesson();
+  const now = lessonNow();
+  const today = new Date().getDay();
+  const cell = (opts) => opts.map((label) => { const r = lessonsOn(1).concat(lessonsOn(2), lessonsOn(3), lessonsOn(4), lessonsOn(5)).flatMap((l) => l.options).find((o) => o.label === label); return r && r.sub ? `<a href="#/s/${r.sub.id}">${esc(label)}</a>` : `<span>${esc(label)}</span>`; }).join(" <i>/</i> ");
   root.innerHTML = `${topbar({ title: "", right: homeRight(), nav: navHtml("plan") })}
-  <main class="plan"><h1 class="page-title">Plan lekcji</h1><p class="muted lead">Kliknij komórkę i wybierz przedmiot. Godziny zmienisz w ustawieniach.</p>
-  <table class="plan-grid"><thead><tr><th></th>${DAYS.map((d) => `<th>${d}</th>`).join("")}</tr></thead><tbody>${hs.map((h, i) => `<tr><th><b>${i + 1}</b><small>${esc(h)}</small></th>${DAYS.map((_, d) => { const sid = plan.get(`${d + 1}-${i}`); const s = sid ? subject(sid) : null; const isNow = now && now.day === d + 1 && now.slot === i; return `<td><button data-cell="${d + 1}-${i}" class="${s ? "" : "empty"} ${isNow ? "now" : ""}">${s ? `${esc(s.emoji || "")} ${esc(s.name)}` : ""}</button></td>`; }).join("")}</tr>`).join("")}</tbody></table></main>`;
-  root.querySelector("main").addEventListener("click", (e) => {
-    const b = e.target.closest("[data-cell]");
-    if (!b) return;
-    popMenu(b, subs.map((s) => [`${s.emoji || ""} ${s.name}`.trim(), () => plan.set(b.dataset.cell, s.id)]).concat([["Pusto", () => plan.delete(b.dataset.cell), "muted"]]));
-  });
+  <main class="plan"><h1 class="page-title">Plan lekcji VIII K</h1><p class="muted lead">Wbudowany w Pupkę na stałe. Kliknij przedmiot, żeby otworzyć jego lekcje. Gdy w jednej godzinie są dwie grupy albo trwa przerwa, strona główna daje oba przedmioty do wyboru.</p>
+  <div class="plan-wrap"><table class="plan-grid"><thead><tr><th></th>${DAY_NAMES.map((n, i) => `<th class="${today === i + 1 ? "today" : ""}">${n}</th>`).join("")}</tr></thead><tbody>${SLOTS.map(([a, b], i) => i === 0 && [1, 2, 3, 4, 5].every((d) => !WEEK[d][0].length) ? "" : `<tr><th><b>${i}.</b><small>${a}-${b}</small></th>${[1, 2, 3, 4, 5].map((d) => { const opts = WEEK[d][i] || []; const isNow = now && now.day === d && now.slot && now.slot.i === i; return `<td class="${opts.length ? "" : "empty"} ${isNow ? "now" : ""} ${today === d ? "today" : ""}">${cell(opts)}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div></main>`;
   bindTopbar(root);
 }
 
@@ -359,7 +360,6 @@ export function renderSettings(root) {
   <main class="settings">
     <section><div class="eyebrow">Wspólne dla trzech</div>
       <label>Domyślna czcionka<select data-set="font">${FONTS.map((f) => `<option ${(settings.get("font") || "Newsreader") === f ? "selected" : ""}>${f}</option>`).join("")}</select></label>
-      <label>Godziny lekcji<div class="hours">${hs.map((h, i) => `<input data-hour="${i}" value="${esc(h)}" size="5">`).join("")}</div></label>
     </section>
     <section><div class="eyebrow">Ja: ${esc(name)}</div>
       <div class="profile-row"><div class="avatar-pick" style="--c:${p.color || "#555"}">${avatarHtml({ name, color: p.color, avatar: p.avatar }, 88)}<input type="file" accept="image/*,.gif" hidden><button type="button" class="btn upload-btn">${icon("image", 16)}<span>Wgraj zdjęcie lub gif</span></button>${p.avatar ? `<button type="button" class="btn small remove-avatar">Usuń zdjęcie</button>` : ""}</div>
