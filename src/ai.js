@@ -74,6 +74,7 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
       <div class="ai-msgs"></div>
       <div class="ai-attach"></div>
     </div>
+    <span class="isl-ring" aria-hidden="true"></span>
     <form class="isl-bar">
       <span class="isl-mark">${icon("sparkle", 17)}</span>
       <span class="isl-peek"><span class="isl-peek-t">Zapytaj AI</span><kbd>⌘J</kbd></span>
@@ -82,11 +83,6 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
       <button type="submit" class="isl-send" title="Wyślij (Enter)">${icon("up", 17)}</button>
       <button type="button" class="isl-stop" title="Zatrzymaj (Esc)"><i></i><span>Zatrzymaj</span></button>
     </form>`;
-  const tip = document.createElement("button");
-  tip.type = "button";
-  tip.className = "isl-tip";
-  container.after(tip);
-  tip.addEventListener("click", () => { if (busy) stop(); else { pinned = true; setOpen(true); ta.focus(); } });
   const body = container.querySelector(".isl-body");
   const msgs = container.querySelector(".ai-msgs");
   const form = container.querySelector(".isl-bar");
@@ -121,9 +117,6 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
     container.classList.toggle("busy", busy);
     container.classList.toggle("unread", unread && !busy);
     peek.textContent = busy ? (stepText || "Myślę…") : unread ? "Nowa odpowiedź AI" : "Zapytaj AI";
-    const open = container.classList.contains("open");
-    tip.classList.toggle("on", !open && (busy || unread));
-    tip.innerHTML = busy ? `<i class="spin"></i><span>${esc(stepText || "Myślę…")}</span><b title="Zatrzymaj (Esc)"></b>` : `<span>Nowa odpowiedź AI</span>`;
   }
 
   function paintAttach() {
@@ -351,7 +344,7 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
     },
     isOpen() { return container.classList.contains("open"); },
     focus() { ta.focus(); },
-    destroy() { chat.unobserve(render); stop(); document.removeEventListener("pointerdown", onDocDown, true); clearTimeout(closeTimer); tip.remove(); }
+    destroy() { chat.unobserve(render); stop(); document.removeEventListener("pointerdown", onDocDown, true); clearTimeout(closeTimer); }
   };
   return api;
 }

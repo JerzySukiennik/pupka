@@ -14,7 +14,6 @@ import { createPointer } from "./point.js";
 import { createBubble } from "./bubble.js";
 import { createSlash } from "./slash.js";
 import { gooey, closeGooey } from "./gooey.js";
-import { popMenu } from "./home.js";
 import { openMindEditor, mindMarkup, cleanTree } from "./mind.js";
 
 const PAGE_CONTENT_H = 971;
@@ -41,7 +40,7 @@ export function openCard(root, id) {
       <header class="cbar">
         <a class="icon-btn back" href="#/s/${c.subject}${isTest ? "?tab=tests" : ""}" title="Wstecz">${icon("back")}</a>
         <div class="cb-crumb"><a href="#/s/${c.subject}${isTest ? "?tab=tests" : ""}">${esc(sub ? sub.name : "")}</a>${icon("chevronRight", 14)}<span class="card-title">${esc(c.title || (isTest ? c.name : "Nowa lekcja"))}</span></div>
-        <div class="cb-r"><div class="presence"></div><button class="icon-btn" data-ui="more" title="Więcej">${icon("more")}</button></div>
+        <div class="cb-r"><div class="presence"></div><button class="icon-btn tg ${cursorsHidden ? "" : "on"}" data-ui="cursors" title="${cursorsHidden ? "Pokaż kursory innych" : "Schowaj kursory innych"}">${icon(cursorsHidden ? "eyeOff" : "eye")}</button><button class="icon-btn tg" data-ui="breaks" title="Pokaż granice stron A4">${icon("pages")}</button><button class="icon-btn tg" data-ui="grid" title="Siatka do rysowania (nie drukuje się)">${icon("grid")}</button></div>
       </header>
       <div class="card-body">
         <nav class="rail">
@@ -150,6 +149,7 @@ export function openCard(root, id) {
   }
   const isShape = (t) => SHAPES.some((s) => s[0] === t);
   function syncDrawUi(s) {
+    const gb = view.querySelector('[data-ui="grid"]'); if (gb) gb.classList.toggle("on", !!s.grid);
     if (s.hint) toast(s.hint, 4500);
     rail.querySelector('[data-mode="text"]').classList.toggle("on", mode === "text");
     rail.querySelectorAll("[data-tool]").forEach((b) => b.classList.toggle("on", mode === "draw" && (b.dataset.tool === s.tool || (b.dataset.tool === "shape" && isShape(s.tool)))));
@@ -198,17 +198,15 @@ export function openCard(root, id) {
     const b = e.target.closest("[data-ui]");
     if (!b) return;
     const a = b.dataset.ui;
-    if (a === "ai") ai.toggle();
-    else if (a === "print") window.print();
-    else if (a === "more") {
-      const hidden = document.body.classList.contains("hide-cursors");
-      popMenu(b, [
-        ["Drukuj (Cmd+P)", () => window.print()],
-        [hidden ? "Pokaż kursory innych" : "Schowaj kursory innych", () => { document.body.classList.toggle("hide-cursors", !hidden); localStorage.setItem("pupka-cursors", hidden ? "1" : "0"); }],
-        [pageEl.classList.contains("show-breaks") ? "Schowaj granice stron A4" : "Pokaż granice stron A4", () => pageEl.classList.toggle("show-breaks")],
-        [draw.getState().grid ? "Wyłącz siatkę do rysowania" : "Włącz siatkę do rysowania", () => draw.toggleGrid()]
-      ]);
-    }
+    if (a === "cursors") {
+      const hide = !document.body.classList.contains("hide-cursors");
+      document.body.classList.toggle("hide-cursors", hide);
+      try { localStorage.setItem("pupka-cursors", hide ? "0" : "1"); } catch (err) { /* storage blocked */ }
+      b.classList.toggle("on", !hide); b.innerHTML = icon(hide ? "eyeOff" : "eye"); b.title = hide ? "Pokaż kursory innych" : "Schowaj kursory innych";
+    } else if (a === "breaks") {
+      const on = pageEl.classList.toggle("show-breaks");
+      b.classList.toggle("on", on); b.title = on ? "Schowaj granice stron A4" : "Pokaż granice stron A4";
+    } else if (a === "grid") draw.toggleGrid();
   });
 
   function blockPos(bid) { let at = null; editor.state.doc.forEach((n, p) => { if (at == null && n.attrs && n.attrs.bid === bid) at = p; }); return at; }

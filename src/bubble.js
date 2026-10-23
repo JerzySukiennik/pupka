@@ -57,9 +57,13 @@ export function createBubble({ editor, isDrawing, onExplain, toast }) {
   editor.on("blur", () => setTimeout(() => { if (!busy && !el.matches(":hover") && !(menu && menu.matches(":hover")) && !editor.view.hasFocus()) hide(); }, 160));
   el.addEventListener("mousedown", (e) => e.preventDefault());
 
-  function closeMenu() { if (menu) { menu.remove(); menu = null; } }
+  let menuAnchor = null;
+  function closeMenu() { if (menu) { menu.remove(); menu = null; } if (menuAnchor) menuAnchor.classList.remove("menu-open"); menuAnchor = null; }
   function openMenu(anchor, items, onPick) {
+    if (menu && menuAnchor === anchor) { closeMenu(); return; }
     closeMenu();
+    menuAnchor = anchor;
+    anchor.classList.add("menu-open");
     menu = document.createElement("div");
     menu.className = "fmt-menu";
     menu.innerHTML = items.map((it) => (it === "-" ? `<span class="sep"></span>` : `<button data-k="${it[0]}" class="${it[2] || ""}" style="${it[3] || ""}">${it[1]}</button>`)).join("");

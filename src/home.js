@@ -272,7 +272,9 @@ function subjectMenu(anchor, sid) {
   ]);
 }
 
+let openPop = null;
 export function popMenu(anchor, items) {
+  if (openPop) { const same = openPop.anchor === anchor; openPop.close(); if (same) return; }
   const m = document.createElement("div");
   m.className = "pop-menu";
   m.innerHTML = items.map(([label, , cls], i) => `<button data-i="${i}" class="${cls || ""}">${esc(label)}</button>`).join("");
@@ -280,9 +282,12 @@ export function popMenu(anchor, items) {
   const r = anchor.getBoundingClientRect();
   m.style.left = Math.min(r.left, window.innerWidth - m.offsetWidth - 8) + "px";
   m.style.top = Math.min(r.bottom + 6, window.innerHeight - m.offsetHeight - 8) + "px";
-  const close = () => { m.remove(); document.removeEventListener("mousedown", onDoc); };
-  const onDoc = (e) => { if (!m.contains(e.target)) close(); };
-  setTimeout(() => document.addEventListener("mousedown", onDoc), 0);
+  const close = () => { m.remove(); anchor.classList.remove("menu-open"); document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey, true); if (openPop && openPop.m === m) openPop = null; };
+  const onDoc = (e) => { if (!m.contains(e.target) && !anchor.contains(e.target)) close(); };
+  const onKey = (e) => { if (e.key === "Escape") { e.stopPropagation(); close(); } };
+  setTimeout(() => { document.addEventListener("mousedown", onDoc); document.addEventListener("keydown", onKey, true); }, 0);
+  anchor.classList.add("menu-open");
+  openPop = { anchor, m, close };
   m.addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; close(); items[+b.dataset.i][1](); });
 }
 
