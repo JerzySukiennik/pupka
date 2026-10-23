@@ -613,7 +613,10 @@ body.hide-cursors .collaboration-cursor__selection { background: transparent !im
 .isl-peek kbd { margin-left: auto; }
 .isl.busy .isl-peek kbd { display: none; }
 .isl.busy .isl-peek { color: var(--fg); }
-.isl textarea { flex: 1; resize: none; max-height: 140px; border: 0; background: transparent; padding: 8px 4px; font: 15px/1.4 var(--ui); }
+.isl textarea { flex: 1; min-width: 0; height: 37px; resize: none; max-height: 140px; border: 0; background: transparent; padding: 8px 4px; font: 15px/1.4 var(--ui); overflow-y: hidden; }
+.isl textarea::placeholder { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--fg3); }
+.isl textarea:placeholder-shown { overflow: hidden; }
+.isl textarea:focus, .isl textarea:focus-visible { outline: none; }
 .isl-peek { display: none !important; }
 .isl-btn, .isl-send { width: 36px; height: 36px; border-radius: 12px; display: grid; place-items: center; flex: none; color: var(--fg2); }
 .isl-btn:hover { background: var(--bg3); color: var(--fg); }

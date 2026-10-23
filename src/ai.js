@@ -79,7 +79,7 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
     <form class="isl-bar">
       <span class="isl-mark">${icon("sparkle", 17)}</span>
       <span class="isl-peek"><span class="isl-peek-t">Zapytaj AI</span><kbd>⌘J</kbd></span>
-      <textarea rows="1" placeholder="Zapytaj, poproś o poprawkę albo o obrazek…"></textarea>
+      <textarea rows="1" placeholder="Zapytaj albo poproś o zmianę…"></textarea>
       <button type="button" class="isl-btn isl-clip" title="Dołącz obraz (albo wklej / przeciągnij)">${icon("clip", 17)}</button>
       <button type="submit" class="isl-send" title="Wyślij (Enter)">${icon("up", 17)}</button>
       <button type="button" class="isl-stop" title="Zatrzymaj (Esc)"><i></i><span>Zatrzymaj</span></button>
@@ -186,7 +186,7 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
     editor.commands.focus("end");
   });
 
-  function autosize() { ta.style.height = "auto"; ta.style.height = Math.min(140, ta.scrollHeight) + "px"; }
+  function autosize() { ta.style.height = "auto"; const h = ta.value ? ta.scrollHeight : 37; ta.style.height = Math.min(140, h) + "px"; ta.style.overflowY = h > 140 ? "auto" : "hidden"; }
   ta.addEventListener("input", autosize);
   ta.addEventListener("keydown", (e) => {
     if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); form.requestSubmit(); }
