@@ -316,7 +316,7 @@ export async function chat(req, env, origin, sse) {
 export async function rewrite(req, env) {
   const p = await req.json();
   const text = String(p.text || "").slice(0, 12000);
-  const cmd = { explain: "Wyjaśnij ten fragment prościej, w 2-4 zdaniach, tak żeby zrozumiał uczeń 8 klasy.", expand: "Rozwiń ten fragment: dodaj brakujące szczegóły, przykłady i wyjaśnienia, zachowaj styl notatki.", fix: "Popraw błędy ortograficzne, interpunkcyjne, gramatyczne i merytoryczne. Zmieniaj tylko to, co błędne.", shorten: "Skróć ten fragment do najważniejszych punktów, zachowaj sens." }[p.mode] || String(p.instruction || "").slice(0, 500);
+  const cmd = { explain: "Wyjaśnij ten fragment prościej, w 2-4 zdaniach, tak żeby zrozumiał uczeń 8 klasy.", expand: "Rozwiń ten fragment: dodaj brakujące szczegóły, przykłady i wyjaśnienia, zachowaj styl notatki.", fix: "Popraw WYŁĄCZNIE błędy formalne: wielkie litery, kropki, przecinki i inne znaki interpunkcyjne, literówki i ortografię (ó/u, rz/ż, ch/h, nie z ...), spacje. NIE zmieniaj treści: zostaw każde słowo, kolejność, sformułowania, liczby, daty, nazwy i fakty, nawet jeśli wyglądają na błędne merytorycznie. Nie dopisuj, nie usuwaj i nie przeredagowuj zdań. Zachowaj formatowanie (listy, pogrubienia, nagłówki). Jeśli nie ma błędów formalnych, zwróć fragment bez zmian.", shorten: "Skróć ten fragment do najważniejszych punktów, zachowaj sens." }[p.mode] || String(p.instruction || "").slice(0, 500);
   const content = `FRAGMENT:\n${text}\n\nPOLECENIE: ${cmd}`;
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",

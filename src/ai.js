@@ -62,7 +62,7 @@ const STEP = {
   read_card: "Czytam inną kartę", search_images: "Szukam obrazka", find_text: "Szukam tekstu", view_image: "Oglądam obrazek",
   draw_on_image: "Rysuję na obrazku", fill_on_image: "Koloruję obszary", draw_on_card: "Rysuję na kartce", delete_drawings: "Usuwam rysunki", edit_card: "Piszę zmiany w karcie", make_mind_map: "Robię mapę myśli"
 };
-const SUGGEST = [["spell", "Sprawdź błędy", "Sprawdź błędy na tej karcie i popraw je."], ["wand", "Wyjaśnij prościej", "Wyjaśnij mi ten temat prościej, w kilku zdaniach."], ["layers", "Pytania powtórkowe", "Zrób 5 krótkich pytań powtórkowych z tej karty, z odpowiedziami na końcu."], ["image", "Obrazek do tematu", "Znajdź dobry obrazek do tego tematu i wstaw go w odpowiednie miejsce."]];
+const SUGGEST = [["spell", "Popraw błędy", "Popraw na tej karcie tylko błędy formalne (wielkie litery, kropki, przecinki, literówki, ortografię). Nie zmieniaj treści; jeśli coś wygląda na błąd merytoryczny, tylko mi to wypisz."], ["wand", "Wyjaśnij prościej", "Wyjaśnij mi ten temat prościej, w kilku zdaniach."], ["layers", "Pytania powtórkowe", "Zrób 5 krótkich pytań powtórkowych z tej karty, z odpowiedziami na końcu."], ["image", "Obrazek do tematu", "Znajdź dobry obrazek do tego tematu i wstaw go w odpowiednie miejsce."]];
 const HOVER = matchMedia("(hover: hover)").matches;
 
 export function createAiIsland({ editor, entry, getCard, container, onEdited, draw, undo, insertMind }) {
@@ -356,12 +356,38 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
   return api;
 }
 
+const letters = (t) => t.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/ł/g, "l").replace(/[^\p{L}\p{N}]/gu, "");
+function withinEdits(a, b, k) {
+  if (Math.abs(a.length - b.length) > k) return false;
+  let prev = new Array(b.length + 1);
+  for (let j = 0; j <= b.length; j++) prev[j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    const cur = new Array(b.length + 1).fill(k + 1);
+    cur[0] = i;
+    let best = cur[0];
+    for (let j = Math.max(1, i - k); j <= Math.min(b.length, i + k); j++) {
+      cur[j] = Math.min(prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1), (prev[j] ?? k + 1) + 1, cur[j - 1] + 1);
+      if (cur[j] < best) best = cur[j];
+    }
+    if (best > k) return false;
+    prev = cur;
+  }
+  return prev[b.length] <= k;
+}
+export function keepsContent(before, after) {
+  const nums = (t) => (t.match(/\d+/g) || []).join(",");
+  if (nums(before) !== nums(after)) return false;
+  const a = letters(before), b = letters(after);
+  return withinEdits(a, b, 3 + Math.ceil(a.length * 0.06));
+}
+
 export async function rewriteSelection(editor, mode) {
   const { from, to, empty } = editor.state.selection;
   if (empty) return;
   const text = editor.state.doc.textBetween(from, to, "\n");
   if (!text.trim()) return;
   const md = await aiRewrite({ mode, text });
+  if (mode === "fix" && !keepsContent(text, md)) throw new Error("poprawka zmieniałaby treść, a nie tylko pisownię i interpunkcję, więc jej nie wstawiłem");
   const blocks = parseMarkdown(md);
   const $from = editor.state.doc.resolve(from), $to = editor.state.doc.resolve(to);
   const sameBlock = $from.sameParent($to) && $from.parent.isTextblock;
