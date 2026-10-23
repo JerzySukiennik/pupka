@@ -1,18 +1,25 @@
-/* Card screen: TipTap editor bound to the card's Yjs doc, toolbar, drawing layer, presence, AI panel, print. */
+/* Card screen: TipTap editor bound to the card's Yjs doc, tool rail, sibling tabs, format bubble, "/" menu, drawing layer, presence, AI island, print. */
 
 import { Editor, StarterKit, Collaboration, CollaborationCursor, Underline, Subscript, Superscript, Table, TableRow, TableCell, TableHeader, Placeholder, TextStyle, FontFamily, TextAlign, yUndoPluginKey } from "../lib/vendor.js";
-import { BlockId, MathNode, Callout, TestHeader, Spacer, ResizableImage, Shortcuts, KINDS, closeMathPopover } from "./extensions.js";
+import { BlockId, MathNode, Callout, TestHeader, Spacer, ResizableImage, Shortcuts, closeMathPopover } from "./extensions.js";
 import { createDraw, COLORS, SIZES } from "./draw.js";
-import { createAiPanel, createSelectionMenu } from "./ai.js";
+import { createAiIsland } from "./ai.js";
 import { uploadImage, importImageUrl } from "./net.js";
-import { card as getCard, subject, me, myProfile, profileOf, openCardDoc, closeCardDoc, updateCard, updatePresence, settings, fmtDateLong, FONTS, trashCard, state, onChange } from "./store.js";
+import { card as getCard, subject, me, myProfile, profileOf, openCardDoc, closeCardDoc, updateCard, updatePresence, settings, fmtDateLong, listCards, createLesson, state, onChange, uid } from "./store.js";
 import { docToPlain, esc } from "./md.js";
-import { topbar, avatarHtml, presenceHtml } from "./ui.js";
+import { presenceHtml } from "./ui.js";
 import { icon } from "./icons.js";
 import { Spell } from "./spell.js";
 import { createPointer } from "./point.js";
+import { createBubble } from "./bubble.js";
+import { createSlash } from "./slash.js";
+import { gooey, closeGooey } from "./gooey.js";
+import { popMenu } from "./home.js";
+import { openMindEditor, mindMarkup, cleanTree } from "./mind.js";
 
 const PAGE_CONTENT_H = 971;
+const SHAPES = [["line", "line", "Linia (/)"], ["arrow", "arrow", "Strzałka (A)"], ["rect", "rect", "Prostokąt (R)"], ["ellipse", "ellipse", "Elipsa (O)"]];
+const short = (iso) => (iso ? `${iso.slice(8, 10)}.${iso.slice(5, 7)}` : "");
 
 export function openCard(root, id) {
   const c = getCard(id);
@@ -25,61 +32,48 @@ export function openCard(root, id) {
   const entry = openCardDoc(id);
   const cursorsHidden = localStorage.getItem("pupka-cursors") === "0";
   document.body.classList.toggle("hide-cursors", cursorsHidden);
+  const mobile = matchMedia("(max-width: 900px)").matches;
+  let shapeTool = localStorage.getItem("pupka-shape") || "rect";
+  let mode = "text";
 
   root.innerHTML = `
     <div class="card-view ${isTest ? "is-test" : ""}">
-      ${topbar({ back: `#/s/${c.subject}${isTest ? "?tab=tests" : ""}`, title: `<span class="crumb">${esc(sub ? sub.name : "")}</span><span class="card-title">${esc(c.title || (isTest ? c.name : "Nowa lekcja"))}</span>`, right: `<div class="presence"></div>` })}
-      <div class="toolbar">
-        <div class="tb-left">
-          <div class="seg mode"><button data-mode="text" class="on" title="Pisanie (Esc)">${icon("text", 16)}<span>Tekst</span></button><button data-mode="draw" title="Rysowanie (Cmd+D)">${icon("pen", 16)}<span>Rysuj</span></button></div>
-        </div>
-        <div class="tb-scroll">
-        <div class="tb-group text-tools">
-          <button data-cmd="undo" title="Cofnij (Cmd+Z)">${icon("undo")}</button><button data-cmd="redo" title="Ponów (Cmd+Shift+Z)">${icon("redo")}</button>
-          <span class="sep"></span>
-          <select class="font-sel" title="Czcionka">${FONTS.map((f) => `<option value="${f}">${f}</option>`).join("")}</select>
-          <select class="block-sel" title="Styl akapitu"><option value="p">Zwykły tekst</option><option value="1">Nagłówek 1</option><option value="2">Nagłówek 2</option><option value="3">Nagłówek 3</option></select>
-          <span class="sep"></span>
-          <button data-cmd="bold" class="glyph" title="Pogrubienie (Cmd+B)"><b>B</b></button><button data-cmd="italic" class="glyph" title="Kursywa (Cmd+I)"><i>I</i></button><button data-cmd="underline" class="glyph" title="Podkreślenie (Cmd+U)"><u>U</u></button><button data-cmd="strike" class="glyph" title="Przekreślenie"><s>S</s></button>
-          <button data-cmd="superscript" class="glyph" title="Indeks górny (^x^)">x<sup>2</sup></button><button data-cmd="subscript" class="glyph" title="Indeks dolny (~x~)">H<sub>2</sub></button>
-          <span class="sep"></span>
-          <button data-cmd="bulletList" title="Lista (- )">${icon("list")}</button><button data-cmd="orderedList" title="Numeracja (1. )">${icon("listNum")}</button><button data-cmd="blockquote" title="Cytat (> )">${icon("quote")}</button>
-          <span class="sep"></span>
-          <button data-cmd="table" title="Tabela">${icon("table")}</button><button data-cmd="image" title="Obrazek lub gif (albo wklej / przeciągnij)">${icon("image")}</button><button data-cmd="camera" title="Zrób zdjęcie aparatem">${icon("camera")}</button><button data-cmd="math" title="Wzór ($x^2$)">${icon("formula")}</button>
-          <div class="dd"><button data-cmd="callout" title="Ramka: definicja, ważne, wzór (!d !w !z)">${icon("box")}</button><div class="dd-menu"><button data-callout="definicja">Definicja</button><button data-callout="wazne">Ważne</button><button data-callout="wzor">Wzór</button></div></div>
-          ${isTest && canEdit ? `<span class="sep"></span><button data-cmd="signature" class="labeled" title="Wstaw mój podpis">${icon("sign")}<span>Podpis</span></button>` : ""}
-        </div>
-        <div class="tb-group draw-tools">
-          <button data-tool="pen" class="on" title="Pióro (P, Shift = prosta)">${icon("pen")}</button><button data-tool="hl" title="Zakreślacz (H)">${icon("marker")}</button><button data-tool="eraser" title="Gumka (E)">${icon("eraser")}</button><button data-tool="lasso" title="Lasso: zaznacz, przesuń, kopiuj (L)">${icon("lasso")}</button>
-          <span class="sep"></span>
-          <button data-tool="line" title="Linia">${icon("line")}</button><button data-tool="arrow" title="Strzałka (A)">${icon("arrow")}</button><button data-tool="rect" title="Prostokąt (R)">${icon("rect")}</button><button data-tool="ellipse" title="Elipsa (O)">${icon("ellipse")}</button><button data-tool="label" title="Tekst na rysunku (T)">${icon("text")}</button><button data-tool="fill" title="Wiadro: wypełnij obszar na obrazku dokładnie do linii (B)">${icon("bucket")}</button>
-          <span class="sep"></span>
-          <div class="swatches">${COLORS.map((col) => `<button data-color="${col}" style="--c:${col}" title="Kolor"></button>`).join("")}</div>
-          <span class="sep"></span>
-          <div class="sizes">${SIZES.map((s, i) => `<button data-size="${s}" title="Grubość ${i + 1}"><i style="width:${s + 4}px;height:${s + 4}px"></i></button>`).join("")}</div>
-          <span class="sep"></span>
-          <button data-draw="undo" title="Cofnij rysunek (Cmd+Z)">${icon("undo")}</button><button data-draw="redo" title="Ponów (Cmd+Shift+Z)">${icon("redo")}</button>
-          <button data-draw="grid" title="Siatka pomocnicza (nie drukuje się)">${icon("grid")}</button>
-          <button data-draw="delete" title="Usuń zaznaczone (Backspace)">${icon("trash")}</button>
-        </div>
-        </div>
-        <div class="tb-right">
-          <button data-ui="cursors" class="${cursorsHidden ? "" : "on"}" title="Pokaż lub schowaj kursory innych">${icon(cursorsHidden ? "eyeOff" : "eye")}</button>
-          <button data-ui="breaks" title="Granice stron A4">${icon("pages")}</button>
-          <button data-ui="print" title="Drukuj (Cmd+P)">${icon("print")}</button>
-          <button data-ui="ai" class="labeled ai-btn" title="Czat AI (Cmd+J)">${icon("sparkle")}<span>AI</span></button>
-        </div>
-      </div>
+      <header class="cbar">
+        <a class="icon-btn back" href="#/s/${c.subject}${isTest ? "?tab=tests" : ""}" title="Wstecz">${icon("back")}</a>
+        <div class="cb-crumb"><a href="#/s/${c.subject}${isTest ? "?tab=tests" : ""}">${esc(sub ? sub.name : "")}</a>${icon("chevronRight", 14)}<span class="card-title">${esc(c.title || (isTest ? c.name : "Nowa lekcja"))}</span></div>
+        <div class="cb-r"><div class="presence"></div><button class="icon-btn" data-ui="print" title="Drukuj (Cmd+P)">${icon("print")}</button><button class="icon-btn" data-ui="more" title="Więcej">${icon("more")}</button><button class="ai-chip" data-ui="ai" title="Czat AI (Cmd+J)">${icon("sparkle", 15)}<span>AI</span><kbd>⌘J</kbd></button></div>
+      </header>
       <div class="card-body">
+        <nav class="rail">
+          <button data-mode="text" class="on" title="Pisanie (Esc)">${icon("text")}</button>
+          ${canEdit ? `<button data-insert title="Wstaw: obrazek, tabela, wzór, ramka… (albo wpisz / na początku linii)">${icon("plus")}</button>` : ""}
+          <span class="rsep"></span>
+          <button data-tool="pen" title="Pióro (P, Shift = prosta)">${icon("pen")}</button>
+          <button data-tool="hl" title="Zakreślacz (H)">${icon("marker")}</button>
+          <button data-tool="eraser" class="more" title="Gumka (E, kliknij jeszcze raz: rodzaj)">${icon("eraser")}</button>
+          <button data-tool="lasso" title="Lasso: zaznacz, przesuń, kopiuj (L)">${icon("lasso")}</button>
+          <button data-tool="shape" class="more" title="Kształty (kliknij jeszcze raz: wybór)">${icon(shapeTool)}</button>
+          <button data-tool="label" title="Tekst na rysunku (T)">${icon("aa")}</button>
+          <button data-tool="fill" title="Wiadro: wypełnij obszar na obrazku dokładnie do linii (B)">${icon("bucket")}</button>
+          <span class="rsep"></span>
+          <button data-goo="color" class="r-color" title="Kolor"><i></i></button>
+          <button data-goo="size" class="r-size" title="Grubość (1, 2, 3)"><i></i></button>
+          <span class="rsep"></span>
+          <button data-draw="undo" title="Cofnij (Cmd+Z)">${icon("undo")}</button>
+          <button data-draw="redo" title="Ponów (Cmd+Shift+Z)">${icon("redo")}</button>
+          <button data-draw="delete" class="r-del" title="Usuń zaznaczone (Backspace)">${icon("trash")}</button>
+          ${isTest && canEdit ? `<span class="rsep"></span><button data-cmd="signature" title="Wstaw mój podpis">${icon("sign")}</button>` : ""}
+        </nav>
         <div class="workspace">
           <div class="page">
             <div class="page-head">${esc(fmtDateLong(c.date))}</div>
             <div class="editor" lang="pl"></div>
             <div class="page-breaks"></div>
+            <div class="sib"></div>
           </div>
           ${!canEdit ? `<div class="readonly-note">${esc(c.testKind === "sprawdzian" ? "Sprawdzian" : "Kartkówka")} · ${esc(profileOf(c.owner).fullName || c.owner)}. Możesz tylko oglądać, pisze właściciel.</div>` : ""}
         </div>
-        <aside class="ai-panel"></aside>
+        <div class="isl"></div>
       </div>
     </div>`;
 
@@ -88,23 +82,24 @@ export function openCard(root, id) {
   const editorEl = view.querySelector(".editor");
   const presenceEl = view.querySelector(".presence");
   const titleEl = view.querySelector(".card-title");
-  const defaultFont = settings.get("font") || "Montserrat";
+  const sibEl = view.querySelector(".sib");
+  const rail = view.querySelector(".rail");
+  const defaultFont = settings.get("font") || "Newsreader";
   pageEl.style.setProperty("--doc-font", `"${defaultFont}"`);
-  view.querySelector(".font-sel").value = defaultFont;
 
   const editor = new Editor({
     element: editorEl,
     editable: canEdit,
-    autofocus: canEdit ? "end" : false,
+    autofocus: canEdit && !mobile ? "end" : false,
     editorProps: { attributes: { spellcheck: "false", lang: "pl", class: "doc" }, transformPastedHTML: (html) => html.replace(/<img\b[^>]*>/gi, "") },
     extensions: [
-      StarterKit.configure({ history: false, heading: { levels: [1, 2, 3] }, dropcursor: { color: prof.color || "#2f7cf6", width: 2 } }),
+      StarterKit.configure({ history: false, heading: { levels: [1, 2, 3] }, dropcursor: { color: prof.color || "#c96442", width: 2 } }),
       Collaboration.configure({ document: entry.doc, field: "prosemirror" }),
       CollaborationCursor.configure({ provider: entry.provider, user: { name, color: prof.color || "#2f7cf6" } }),
       Underline, Subscript, Superscript, TextStyle, FontFamily, TextAlign.configure({ types: ["heading", "paragraph"] }),
       Table.configure({ resizable: false }), TableRow, TableCell, TableHeader,
       ResizableImage.configure({ inline: false, allowBase64: false }),
-      Placeholder.configure({ placeholder: isTest ? "Pisz tutaj…" : "Pisz tutaj. Skróty: - lista, # nagłówek, !w ramka, $x^2$ wzór" }),
+      Placeholder.configure({ placeholder: isTest ? "Pisz tutaj…" : "Pisz tutaj. Wpisz / żeby wstawić obrazek, tabelę, wzór albo ramkę." }),
       BlockId, MathNode, Callout, TestHeader, Spacer, Shortcuts, Spell
     ]
   });
@@ -115,104 +110,172 @@ export function openCard(root, id) {
   undoManager.addTrackedOrigin("draw");
   const draw = createDraw({ pageEl, pmEl, ydoc: entry.doc, provider: entry.provider, name, color: prof.color || "#111", canEdit: () => canEdit, onChange: syncDrawUi, undoManager });
   pageEl.__draw = draw;
-  const aiPanel = createAiPanel({ editor, entry, getCard: () => getCard(id) || c, container: view.querySelector(".ai-panel"), onEdited: () => draw.rerender(), draw, undo: () => editor.commands.undo() });
+  const ai = createAiIsland({ editor, entry, getCard: () => getCard(id) || c, container: view.querySelector(".isl"), onEdited: () => draw.rerender(), draw, undo: () => editor.commands.undo(), insertMind: (bid, tree) => insertMind(bid, tree) });
   const pointer = createPointer({
     pageEl, pmEl,
-    isActive: () => aiPanel.isOpen(),
-    onPick: (shot) => { if (shot) aiPanel.addAttachment({ kind: "point", blob: shot.blob, thumb: shot.thumb, blocks: shot.blocks }); else toast("Nie udało się zrobić zrzutu zaznaczenia.", 4000); },
-    onBusy: (v) => aiPanel.setPointing(v)
+    isActive: () => ai.isOpen(),
+    onPick: (shot) => { if (shot) ai.addAttachment({ kind: "point", blob: shot.blob, thumb: shot.thumb, blocks: shot.blocks }); else toast("Nie udało się zrobić zrzutu zaznaczenia.", 4000); },
+    onBusy: (v) => ai.setPointing(v)
   });
-  const selMenu = createSelectionMenu({ editor, aiPanel, isDrawing: () => draw.isActive() });
+  const bubble = createBubble({ editor, isDrawing: () => draw.isActive(), toast, onExplain: (t) => ai.send(`Wyjaśnij mi ten fragment:\n"${t.slice(0, 2000)}"`) });
+  const slash = createSlash({ editor, actions: () => [
+    { icon: "image", label: "Obrazek lub gif", keys: "zdjecie foto gif plik", hint: "albo wklej", run: pickImage },
+    { icon: "camera", label: "Zdjęcie aparatem", keys: "kamera foto", run: openCamera },
+    { icon: "search", label: "Obrazek z internetu (AI)", keys: "google znajdz", run: () => ai.send("Znajdź dobry obrazek do tego tematu i wstaw go w miejsce, gdzie jest kursor.") },
+    { icon: "table", label: "Tabela", keys: "tabelka", run: () => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
+    { icon: "formula", label: "Wzór", keys: "matma math latex", hint: "$x^2$", run: () => editor.commands.promptMath() },
+    { icon: "box", label: "Ramka: definicja", keys: "callout", hint: "!d", run: () => editor.chain().focus().toggleCallout("definicja").run() },
+    { icon: "box", label: "Ramka: ważne", keys: "callout wazne", hint: "!w", run: () => editor.chain().focus().toggleCallout("wazne").run() },
+    { icon: "box", label: "Ramka: wzór", keys: "callout", hint: "!z", run: () => editor.chain().focus().toggleCallout("wzor").run() },
+    { icon: "heading", label: "Nagłówek", keys: "tytul h1", hint: "#", run: () => editor.chain().focus().toggleHeading({ level: 2 }).run() },
+    { icon: "list", label: "Lista", keys: "punkty", hint: "-", run: () => editor.chain().focus().toggleBulletList().run() },
+    { icon: "listNum", label: "Numeracja", keys: "lista numerowana", hint: "1.", run: () => editor.chain().focus().toggleOrderedList().run() },
+    { icon: "quote", label: "Cytat", keys: "", hint: ">", run: () => editor.chain().focus().toggleBlockquote().run() },
+    { icon: "mind", label: "Mapa myśli", keys: "mapa mysli pojec schemat", run: newMind },
+    { icon: "pen", label: "Rysunek", keys: "rysuj szkic", run: () => setMode("draw") },
+    { icon: "sign", label: "Mój podpis", keys: "podpis", hidden: !(isTest && canEdit), run: insertSignature }
+  ] });
 
-  let mode = "text";
   function setMode(m) {
     if (!canEdit && m === "draw") return;
     mode = m;
     draw.setActive(m === "draw");
     view.classList.toggle("drawing", m === "draw");
-    view.querySelectorAll("[data-mode]").forEach((b) => b.classList.toggle("on", b.dataset.mode === m));
     closeMathPopover();
+    closeGooey();
+    bubble.hide();
+    slash.hide();
     if (m === "text") editor.commands.focus(); else editor.view.dom.blur();
+    syncDrawUi(draw.getState());
   }
+  const isShape = (t) => SHAPES.some((s) => s[0] === t);
   function syncDrawUi(s) {
     if (s.hint) toast(s.hint, 4500);
-    view.querySelectorAll("[data-tool]").forEach((b) => b.classList.toggle("on", b.dataset.tool === s.tool));
-    view.querySelectorAll("[data-color]").forEach((b) => b.classList.toggle("on", b.dataset.color === s.color));
-    view.querySelectorAll("[data-size]").forEach((b) => b.classList.toggle("on", +b.dataset.size === s.size));
-    const g = view.querySelector('[data-draw="grid"]'); if (g) g.classList.toggle("on", s.grid);
-    const del = view.querySelector('[data-draw="delete"]'); if (del) del.disabled = !s.selection;
+    rail.querySelector('[data-mode="text"]').classList.toggle("on", mode === "text");
+    rail.querySelectorAll("[data-tool]").forEach((b) => b.classList.toggle("on", mode === "draw" && (b.dataset.tool === s.tool || (b.dataset.tool === "shape" && isShape(s.tool)))));
+    const er = rail.querySelector('[data-tool="eraser"]');
+    er.innerHTML = icon(s.eraseMode === "stroke" ? "penOff" : "eraser");
+    rail.querySelector(".r-color i").style.background = s.color;
+    const sz = rail.querySelector(".r-size i"); sz.style.width = sz.style.height = 4 + s.size * 1.6 + "px";
+    rail.querySelector(".r-del").classList.toggle("show", !!s.selection);
+    view.classList.toggle("has-sel", !!s.selection);
   }
   syncDrawUi(draw.getState());
 
-  const toolbar = view.querySelector(".toolbar");
-  toolbar.addEventListener("mousedown", (e) => { if (e.target.closest("button")) e.preventDefault(); });
-  toolbar.addEventListener("click", async (e) => {
+  function pickTool(t) { if (mode !== "draw") setMode("draw"); draw.setTool(t); }
+  const gooDir = () => (matchMedia("(max-width: 900px)").matches ? "up" : "right");
+  rail.addEventListener("mousedown", (e) => { if (e.target.closest("button")) e.preventDefault(); });
+  rail.addEventListener("click", (e) => {
     const b = e.target.closest("button");
     if (!b) return;
-    if (b.dataset.mode) return setMode(b.dataset.mode);
-    if (b.dataset.tool) return draw.setTool(b.dataset.tool);
-    if (b.dataset.color) return draw.setColor(b.dataset.color);
-    if (b.dataset.size) return draw.setSize(+b.dataset.size);
-    if (b.dataset.draw) {
-      const a = b.dataset.draw;
-      if (a === "undo") draw.undo(); else if (a === "redo") draw.redo(); else if (a === "grid") draw.toggleGrid(); else if (a === "delete") draw.deleteSelection();
+    const s = draw.getState();
+    if (b.dataset.mode) { closeGooey(); setMode("text"); return; }
+    if (b.hasAttribute("data-insert")) { if (mode !== "text") setMode("text"); slash.openAtCaret(); return; }
+    if (b.dataset.cmd === "signature") { setMode("text"); insertSignature(); return; }
+    if (b.dataset.tool === "eraser") {
+      if (mode === "draw" && s.tool === "eraser") gooey(b, [
+        { key: "part", html: icon("eraser"), title: "Gumka zwykła: ściera kawałek", on: s.eraseMode === "part" },
+        { key: "stroke", html: icon("penOff"), title: "Cała kreska naraz", on: s.eraseMode === "stroke" },
+        { key: "clear", html: icon("trash"), title: "Wyczyść wszystkie rysunki" }
+      ], { dir: gooDir(), onPick: (k) => { if (k === "clear") { if (draw.count() && confirm("Usunąć wszystkie rysunki z tej karty? (Cmd+Z przywraca)")) draw.clearAll(null, null); } else draw.setEraseMode(k); } });
+      else pickTool("eraser");
       return;
     }
-    if (b.dataset.callout) { editor.chain().focus().toggleCallout(b.dataset.callout).run(); return; }
-    if (b.dataset.ui) {
-      const a = b.dataset.ui;
-      if (a === "ai") aiPanel.toggle();
-      else if (a === "print") window.print();
-      else if (a === "breaks") { pageEl.classList.toggle("show-breaks"); b.classList.toggle("on"); }
-      else if (a === "cursors") { const hidden = !document.body.classList.contains("hide-cursors"); document.body.classList.toggle("hide-cursors", hidden); localStorage.setItem("pupka-cursors", hidden ? "0" : "1"); b.classList.toggle("on", !hidden); b.innerHTML = icon(hidden ? "eyeOff" : "eye"); }
+    if (b.dataset.tool === "shape") {
+      if (mode === "draw" && isShape(s.tool)) gooey(b, SHAPES.map(([k, ic, t]) => ({ key: k, html: icon(ic), title: t, on: s.tool === k })), { dir: gooDir(), onPick: (k) => { shapeTool = k; localStorage.setItem("pupka-shape", k); b.innerHTML = icon(k); pickTool(k); } });
+      else pickTool(shapeTool);
       return;
     }
-    const cmd = b.dataset.cmd;
-    if (!cmd) return;
-    const ch = editor.chain().focus();
-    if (cmd === "undo") ch.undo().run();
-    else if (cmd === "redo") ch.redo().run();
-    else if (cmd === "bold") ch.toggleBold().run();
-    else if (cmd === "italic") ch.toggleItalic().run();
-    else if (cmd === "underline") ch.toggleUnderline().run();
-    else if (cmd === "strike") ch.toggleStrike().run();
-    else if (cmd === "superscript") ch.toggleSuperscript().run();
-    else if (cmd === "subscript") ch.toggleSubscript().run();
-    else if (cmd === "bulletList") ch.toggleBulletList().run();
-    else if (cmd === "orderedList") ch.toggleOrderedList().run();
-    else if (cmd === "blockquote") ch.toggleBlockquote().run();
-    else if (cmd === "table") { if (editor.isActive("table")) tableMenu(b); else ch.insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(); }
-    else if (cmd === "image") pickImage();
-    else if (cmd === "camera") openCamera();
-    else if (cmd === "math") editor.commands.promptMath();
-    else if (cmd === "callout") b.parentElement.classList.toggle("open");
-    else if (cmd === "signature") insertSignature();
+    if (b.dataset.tool) { closeGooey(); pickTool(b.dataset.tool); return; }
+    if (b.dataset.goo === "color") { gooey(b, COLORS.map((col) => ({ key: col, html: `<i class="sw" style="background:${col}"></i>`, on: col === s.color })), { dir: gooDir(), onPick: (k) => { draw.setColor(k); if (mode !== "draw" && !s.selection) pickTool(s.tool === "eraser" || s.tool === "lasso" || s.tool === "fill" ? "pen" : s.tool); } }); return; }
+    if (b.dataset.goo === "size") { gooey(b, SIZES.map((w, i) => ({ key: String(w), html: `<i class="dot" style="width:${4 + w * 1.6}px;height:${4 + w * 1.6}px"></i>`, title: "Grubość " + (i + 1), on: w === s.size })), { dir: gooDir(), onPick: (k) => draw.setSize(+k) }); return; }
+    if (b.dataset.draw === "undo") { editor.commands.undo(); draw.rerender(); return; }
+    if (b.dataset.draw === "redo") { editor.commands.redo(); draw.rerender(); return; }
+    if (b.dataset.draw === "delete") { draw.deleteSelection(); return; }
   });
-  view.querySelector(".font-sel").addEventListener("change", (e) => {
-    const f = e.target.value;
-    if (editor.state.selection.empty) { settings.set("font", f); pageEl.style.setProperty("--doc-font", `"${f}"`); editor.commands.focus(); }
-    else editor.chain().focus().setFontFamily(f).run();
-  });
-  view.querySelector(".block-sel").addEventListener("change", (e) => {
-    const v = e.target.value;
-    if (v === "p") editor.chain().focus().setParagraph().run(); else editor.chain().focus().toggleHeading({ level: +v }).run();
-  });
-  document.addEventListener("click", closeDd);
-  function closeDd(e) { view.querySelectorAll(".dd.open").forEach((d) => { if (!d.contains(e.target)) d.classList.remove("open"); }); }
 
-  function tableMenu(anchor) {
-    const m = document.createElement("div");
-    m.className = "pop-menu";
-    m.innerHTML = `<button data-t="addRowAfter">+ wiersz</button><button data-t="addColumnAfter">+ kolumna</button><button data-t="deleteRow">− wiersz</button><button data-t="deleteColumn">− kolumna</button><button data-t="toggleHeaderRow">nagłówek</button><button data-t="deleteTable" class="danger">usuń tabelę</button>`;
-    const r = anchor.getBoundingClientRect();
-    m.style.left = r.left + "px"; m.style.top = r.bottom + 6 + "px";
-    document.body.appendChild(m);
-    const close = () => { m.remove(); document.removeEventListener("mousedown", onDoc); };
-    const onDoc = (e) => { if (!m.contains(e.target)) close(); };
-    setTimeout(() => document.addEventListener("mousedown", onDoc), 0);
-    m.addEventListener("mousedown", (e) => e.preventDefault());
-    m.addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; editor.chain().focus()[b.dataset.t]().run(); close(); });
+  view.querySelector(".cbar").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-ui]");
+    if (!b) return;
+    const a = b.dataset.ui;
+    if (a === "ai") ai.toggle();
+    else if (a === "print") window.print();
+    else if (a === "more") {
+      const hidden = document.body.classList.contains("hide-cursors");
+      popMenu(b, [
+        [hidden ? "Pokaż kursory innych" : "Schowaj kursory innych", () => { document.body.classList.toggle("hide-cursors", !hidden); localStorage.setItem("pupka-cursors", hidden ? "1" : "0"); }],
+        [pageEl.classList.contains("show-breaks") ? "Schowaj granice stron A4" : "Pokaż granice stron A4", () => pageEl.classList.toggle("show-breaks")],
+        [draw.getState().grid ? "Wyłącz siatkę do rysowania" : "Włącz siatkę do rysowania", () => draw.toggleGrid()]
+      ]);
+    }
+  });
+
+  function blockPos(bid) { let at = null; editor.state.doc.forEach((n, p) => { if (at == null && n.attrs && n.attrs.bid === bid) at = p; }); return at; }
+  function insertMind(afterBid, tree, pos) {
+    if (!canEdit) return false;
+    tree = cleanTree(tree);
+    if (!tree.t) return false;
+    const W = draw.contentWidth();
+    const m = mindMarkup(tree, W);
+    const bid = uid();
+    const doc = editor.state.doc;
+    let at = null, trailing = true;
+    if (afterBid) { const p = blockPos(afterBid); if (p != null) at = p + doc.nodeAt(p).nodeSize; }
+    if (at == null && typeof pos === "number") {
+      try {
+        const $p = doc.resolve(Math.min(pos, doc.content.size));
+        if ($p.depth >= 1 && $p.node(1).type.name === "paragraph" && !$p.node(1).content.size) { at = $p.before(1); trailing = false; }
+        else at = $p.depth >= 1 ? $p.after(1) : pos;
+      } catch (e) { at = null; }
+    }
+    if (at == null) at = doc.content.size;
+    const nodes = [editor.schema.nodes.spacer.create({ h: m.H + 16, bid })];
+    if (trailing && at >= doc.content.size) nodes.push(editor.schema.nodes.paragraph.create());
+    editor.view.dispatch(editor.state.tr.insert(at, nodes));
+    draw.putMind(null, bid, tree, W, m.H);
+    return true;
   }
+  function newMind() {
+    const pos = editor.state.selection.from;
+    const cur = getCard(id) || c;
+    openMindEditor({ tree: { t: cur.title || "Temat", k: [{ t: "Pierwsza gałąź", k: [{ t: "szczegół", k: [] }] }, { t: "Druga gałąź", k: [] }, { t: "Trzecia gałąź", k: [] }] }, width: draw.contentWidth(), onSave: (t) => insertMind(null, t, pos) });
+  }
+  pmEl.addEventListener("click", (e) => {
+    const sp = e.target.closest(".draw-spacer.has-mind");
+    if (!sp || mode === "draw" || !canEdit) return;
+    const hit = draw.mindAt(sp.dataset.bid);
+    if (!hit) return;
+    openMindEditor({
+      tree: hit.s.tree, width: hit.s.W || draw.contentWidth(),
+      onSave: (t) => {
+        const W = draw.contentWidth(), m = mindMarkup(t, W);
+        draw.putMind(hit.id, hit.s.bid, t, W, m.H);
+        const p = blockPos(hit.s.bid);
+        if (p != null) { const n = editor.state.doc.nodeAt(p); editor.view.dispatch(editor.state.tr.setNodeMarkup(p, null, Object.assign({}, n.attrs, { h: m.H + 16 }))); }
+      },
+      onDelete: () => {
+        const p = blockPos(hit.s.bid);
+        if (p != null) editor.view.dispatch(editor.state.tr.delete(p, p + editor.state.doc.nodeAt(p).nodeSize));
+        draw.removeStroke(hit.id);
+      }
+    });
+  });
+
+  function paintSiblings() {
+    const cur = getCard(id) || c;
+    let list, cls = "";
+    if (isTest) { list = listCards(cur.subject, "test").filter((x) => x.group === cur.group); cls = "people"; }
+    else {
+      const all = listCards(cur.subject, "lesson");
+      const i = Math.max(0, all.findIndex((x) => x.id === id));
+      list = all.slice(Math.max(0, i - 3), i + 5);
+    }
+    sibEl.className = "sib " + cls;
+    sibEl.innerHTML = (isTest ? "" : `<button class="sib-new" title="Nowa lekcja">${icon("plus", 14)}</button>`) + list.map((x) => `<a href="#/c/${x.id}" class="${x.id === id ? "on" : ""}" title="${esc(x.title || x.name || "bez tematu")}">${isTest ? esc(x.owner) : short(x.date)}</a>`).join("");
+  }
+  paintSiblings();
+  sibEl.addEventListener("click", (e) => { if (e.target.closest(".sib-new")) { e.preventDefault(); location.hash = "#/c/" + createLesson(c.subject); } });
+  const offIndex = onChange((k) => { if (k !== "status") paintSiblings(); });
 
   function toast(msg, ms = 3500, busy = false) {
     document.querySelectorAll(".toast").forEach((t) => t.remove());
@@ -344,40 +407,31 @@ export function openCard(root, id) {
     editor.chain().focus().insertContent({ type: "image", attrs: { src: sig, alt: "", width: 180, align: "left" } }).run();
   }
 
+
   let titleTimer = null;
   function syncTitle() {
     clearTimeout(titleTimer);
     titleTimer = setTimeout(() => {
       const doc = editor.state.doc;
-      let first = "";
-      doc.forEach((n) => { if (!first && n.isTextblock && n.textContent.trim()) first = n.textContent.trim(); });
+      let first = "", img = "";
+      doc.forEach((n) => { if (!first && n.isTextblock && n.textContent.trim()) first = n.textContent.trim(); if (!img && n.type.name === "image" && n.attrs.src) img = n.attrs.src; });
       let title = c.title || "";
       const m = /^temat\s*:\s*(.*)$/i.exec(first);
       if (m) title = m[1].trim(); else if (!isTest) title = first.slice(0, 80);
       if (isTest) title = c.name;
       const text = docToPlain(doc);
-      updateCard(id, { title, text, updated: Date.now() });
+      updateCard(id, { title, text, img: img || null, updated: Date.now() });
       titleEl.textContent = title || (isTest ? c.name : "Nowa lekcja");
     }, 700);
   }
   editor.on("update", ({ transaction }) => { if (transaction.docChanged) syncTitle(); });
-  editor.on("transaction", updateToolbarState);
   editor.on("update", () => draw.rerender());
-  function updateToolbarState() {
-    const map = { bold: "bold", italic: "italic", underline: "underline", strike: "strike", superscript: "superscript", subscript: "subscript", bulletList: "bulletList", orderedList: "orderedList", blockquote: "blockquote", table: "table", callout: "callout" };
-    for (const k in map) { const b = view.querySelector(`[data-cmd="${k}"]`); if (b) b.classList.toggle("on", editor.isActive(map[k])); }
-    const bs = view.querySelector(".block-sel");
-    bs.value = editor.isActive("heading", { level: 1 }) ? "1" : editor.isActive("heading", { level: 2 }) ? "2" : editor.isActive("heading", { level: 3 }) ? "3" : "p";
-    const ff = editor.getAttributes("textStyle").fontFamily;
-    const fs = view.querySelector(".font-sel");
-    if (ff && FONTS.includes(ff.replace(/"/g, ""))) fs.value = ff.replace(/"/g, ""); else if (!document.activeElement || document.activeElement !== fs) fs.value = settings.get("font") || "Montserrat";
-  }
 
   function renderPresence() {
     const states = [];
     entry.provider.awareness.getStates().forEach((s, cid) => { if (cid !== entry.doc.clientID && s.user) states.push(s); });
     const aiBy = states.find((s) => s.ai) || (entry.provider.awareness.getLocalState() || {}).ai ? true : false;
-    presenceEl.innerHTML = presenceHtml(states.map((s) => s.user)) + (aiBy ? `<span class="ai-typing" title="AI pracuje">✦</span>` : "") + `<span class="net ${state.online ? "on" : ""}" title="${state.online ? "połączono" : "offline, zmiany zapiszą się po powrocie sieci"}"></span>`;
+    presenceEl.innerHTML = presenceHtml(states.map((s) => s.user), 26) + (aiBy ? `<span class="ai-typing" title="AI pracuje">${icon("sparkle", 14)}</span>` : "") + `<span class="net ${state.online ? "on" : ""}" title="${state.online ? "połączono" : "offline, zmiany zapiszą się po powrocie sieci"}"></span>`;
   }
   entry.provider.awareness.on("change", renderPresence);
   const offStatus = onChange((k) => { if (k === "status") renderPresence(); });
@@ -388,7 +442,7 @@ export function openCard(root, id) {
   function onKey(e) {
     const mod = e.metaKey || e.ctrlKey;
     const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
-    if (mod && e.key.toLowerCase() === "j") { e.preventDefault(); aiPanel.toggle(); return; }
+    if (mod && e.key.toLowerCase() === "j") { e.preventDefault(); ai.toggle(); return; }
     if (mod && e.key.toLowerCase() === "z" && canEdit) {
       const el = document.activeElement;
       const inPM = !!(el && el.closest && el.closest(".ProseMirror"));
@@ -402,7 +456,9 @@ export function openCard(root, id) {
     }
     if (mod && (e.key.toLowerCase() === "d" || e.key.toLowerCase() === "e") && !e.shiftKey && canEdit) { e.preventDefault(); setMode(mode === "draw" ? "text" : "draw"); return; }
     if (e.key === "Escape") {
-      if (aiPanel.isOpen() && document.activeElement?.closest(".ai-panel")) { aiPanel.toggle(false); editor.commands.focus(); return; }
+      if (slash.isOpen()) return;
+      if (ai.isBusy() && !(mode === "draw" && draw.hasSelection())) { ai.stop(); return; }
+      if (ai.isOpen() && document.activeElement?.closest(".isl")) { ai.toggle(false); editor.commands.focus(); return; }
       if (mode === "draw") { if (draw.hasSelection()) draw.clearSelection(); else setMode("text"); }
       return;
     }
@@ -416,8 +472,9 @@ export function openCard(root, id) {
     if (e.key === " ") { draw.setSpace(true); return; }
     if (mod) return;
     const k = e.key.toLowerCase();
+    if (k === "e" && draw.getState().tool === "eraser") { e.preventDefault(); draw.setEraseMode(draw.getState().eraseMode === "part" ? "stroke" : "part"); toast(draw.getState().eraseMode === "part" ? "Gumka zwykła" : "Gumka: cała kreska", 1200); return; }
     const map = { p: "pen", h: "hl", e: "eraser", l: "lasso", t: "label", r: "rect", o: "ellipse", a: "arrow", "/": "line", b: "fill" };
-    if (map[k]) { e.preventDefault(); draw.setTool(map[k]); }
+    if (map[k]) { e.preventDefault(); if (isShape(map[k])) { shapeTool = map[k]; localStorage.setItem("pupka-shape", shapeTool); rail.querySelector('[data-tool="shape"]').innerHTML = icon(shapeTool); } draw.setTool(map[k]); }
     else if (["1", "2", "3"].includes(k)) draw.setSize(SIZES[+k - 1]);
   }
   function onKeyUp(e) { if (e.key === " ") draw.setSpace(false); }
@@ -450,15 +507,17 @@ export function openCard(root, id) {
       window.removeEventListener("afterprint", onAfterPrint);
       draw.printCleanup();
       pmEl.removeEventListener("paste", onPaste, true);
-      document.removeEventListener("click", closeDd);
       entry.provider.awareness.off("change", renderPresence);
       offStatus();
+      offIndex();
       clearTimeout(titleTimer);
       clearTimeout(trimTimer);
       closeMathPopover();
-      selMenu.destroy();
+      closeGooey();
+      bubble.destroy();
+      slash.destroy();
       pointer.destroy();
-      aiPanel.destroy();
+      ai.destroy();
       draw.destroy();
       editor.destroy();
       updatePresence({ card: null });

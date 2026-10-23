@@ -75,32 +75,62 @@ export function renderPicker(root, onPicked) {
 function homeRight() {
   const p = myProfile();
   const online = presence().map((s) => s.user);
-  return `${presenceHtml(online, 24)}<span class="net ${state.online ? "on" : ""}" title="${state.online ? "połączono" : "offline"}"></span><button class="icon-btn" data-go="#/search" title="Szukaj (Cmd+K)">${icon("search")}</button><button class="icon-btn" data-go="#/plan" title="Plan lekcji">${icon("calendar")}</button><button class="icon-btn" data-go="#/trash" title="Kosz">${icon("trash")}</button><button class="icon-btn" data-go="#/settings" title="Ustawienia">${icon("settings")}</button><button class="me-btn" data-go="#/switch" title="Zmień osobę">${avatarHtml({ name: me(), color: p.color, avatar: p.avatar }, 28)}</button>`;
+  return `<button class="search-pill" data-go="#/search" title="Szukaj we wszystkich notatkach (Cmd+K)">${icon("search", 15)}<span>Szukaj</span><kbd>⌘K</kbd></button>${presenceHtml(online, 26)}<span class="net ${state.online ? "on" : ""}" title="${state.online ? "połączono" : "offline"}"></span><button class="icon-btn" data-go="#/settings" title="Ustawienia">${icon("settings2")}</button><button class="me-btn" data-go="#/switch" title="Zmień osobę">${avatarHtml({ name: me(), color: p.color, avatar: p.avatar }, 30)}</button>`;
+}
+function navHtml(on) {
+  return [["#/", "Dziś", "home"], ["#/plan", "Plan lekcji", "plan"], ["#/trash", "Kosz", "trash"]].map(([h, t, k]) => `<a href="${h}" class="${k === on ? "on" : ""}">${t}</a>`).join("");
 }
 
 function whoOn(cardId) { return presence().filter((s) => s.card === cardId).map((s) => s.user); }
 function whoOnSubject(sid) { const ids = new Set(listCards(sid).map((c) => c.id)); return presence().filter((s) => s.card && ids.has(s.card)).map((s) => s.user); }
+function snippet(c, n = 150) { const t = (c.text || "").replace(/^\s*temat\s*:[^\n]*\n?/i, "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n).replace(/\s\S*$/, "") + "…" : t; }
+function cardLabel(c) { return c.title || c.name || snippet(c, 60) || "bez tematu"; }
+function todaySlots() {
+  const d = new Date(), day = d.getDay();
+  if (day < 1 || day > 5) return [];
+  const mins = d.getHours() * 60 + d.getMinutes();
+  const now = nowLesson();
+  return hours().map((h, i) => {
+    const sid = plan.get(`${day}-${i}`);
+    const s = sid ? subject(sid) : null;
+    if (!s || s.deleted) return null;
+    const [hh, mm] = h.split(":").map(Number);
+    const cur = now && now.slot === i;
+    return { i, h, s, cur, past: !cur && hh * 60 + mm + 45 < mins };
+  }).filter(Boolean);
+}
 
 export function renderHome(root) {
   const now = nowLesson();
   const ranked = rankedSubjects();
-  const todayCard = now && now.subject ? listCards(now.subject.id, "lesson").find((c) => c.date === today()) : null;
+  const subs = listSubjects();
+  const heroSub = now && now.subject ? now.subject : ranked[0];
+  const isNow = !!(now && now.subject);
+  const lessons = heroSub ? listCards(heroSub.id, "lesson") : [];
+  const todayCard = lessons.find((c) => c.date === today());
+  const last = lessons[0];
+  const inside = heroSub ? whoOnSubject(heroSub.id) : [];
+  const slots = todaySlots();
   const d = new Date();
-  root.innerHTML = `${topbar({ title: "", right: homeRight() })}
+  const recent = allCards().filter((c) => c.kind === "lesson" || c.owner === me()).sort((a, b) => (b.updated || b.created || 0) - (a.updated || a.created || 0)).slice(0, 6);
+  const kicker = isNow ? `Teraz · ${now.slot + 1}. lekcja · ${esc(now.time)}` : `${esc(WEEKDAYS[d.getDay()])} · ${esc(fmtDateLong(today()))}`;
+  const lead = heroSub ? (todayCard ? `Dzisiejsza karta już jest${todayCard.title ? `: ${esc(todayCard.title)}` : ""}.` : last ? `Ostatnio: ${esc(cardLabel(last))}.` : "Jeszcze nie ma tu żadnej lekcji.") : "";
+  root.innerHTML = `${topbar({ title: "", right: homeRight(), nav: navHtml("home") })}
   <main class="home">
-    <header class="home-head"><h1>${esc(WEEKDAYS[d.getDay()])}</h1><div class="home-date">${esc(fmtDateLong(today()))}</div></header>
-    ${now && now.subject ? `<section class="now"><div class="now-text"><span class="eyebrow">Teraz · ${esc(now.time)}</span><h2>${esc(now.subject.emoji || "")} ${esc(now.subject.name)}</h2></div><div class="now-actions">${todayCard ? `<button class="btn primary" data-open="${todayCard.id}">Otwórz dzisiejszą lekcję</button><button class="btn" data-new-lesson="${now.subject.id}">Nowa lekcja</button>` : `<button class="btn primary" data-new-lesson="${now.subject.id}">Nowa lekcja</button>`}</div></section>` : (plan.size ? "" : `<section class="now quiet"><div class="now-text"><span class="eyebrow">Plan lekcji</span><h2>Wpisz plan, a Pupka sama otworzy właściwy przedmiot</h2></div><div class="now-actions"><button class="btn" data-go="#/plan">Uzupełnij plan</button></div></section>`)}
-    <div class="eyebrow list-eyebrow">Przedmioty</div>
-    <div class="bento">
-      ${ranked.map((s, i) => {
-        const lessons = listCards(s.id, "lesson");
-        const tests = listCards(s.id, "test");
-        const last = lessons[0];
-        const tier = i === 0 ? "xl" : i <= 2 ? "md" : "sm";
-        const meta = `${lessons.length} ${plural(lessons.length, "lekcja", "lekcje", "lekcji")}${tests.length ? ` · ${Math.round(tests.length / 3)} na ocenę` : ""}`;
-        return `<a class="tile-b ${tier}" href="#/s/${s.id}"><span class="tb-top"><span class="tb-emoji">${esc(s.emoji || "")}</span><button class="icon-btn row-more" data-subject-menu="${s.id}" title="Opcje">${icon("more")}</button></span><span class="tb-name">${esc(s.name)}</span><span class="tb-meta">${esc(meta)}</span>${tier !== "sm" ? `<span class="tb-last">${last ? `<small>${esc(fmtDate(last.date))}</small>${esc(last.title || "bez tematu")}` : "<small>jeszcze pusto</small>"}</span>` : ""}${tier === "xl" ? `<span class="tb-foot"><button class="btn small" data-new-lesson="${s.id}">${icon("plus", 14)}<span>Nowa lekcja</span></button></span>` : ""}<span class="tb-presence">${presenceHtml(whoOnSubject(s.id), 22)}</span></a>`;
-      }).join("")}
-      <button class="tile-b sm ghost" data-new-subject>${icon("plus", 20)}<span>Nowy przedmiot</span></button>
+    ${heroSub ? `<section class="hero">
+      <h1 class="hero-name">${esc(heroSub.name)}</h1>
+      <div class="hero-side"><div class="kicker">${kicker}</div><p>${lead}${inside.length ? ` <span class="live-in">${presenceHtml(inside, 20)} ${esc(inside.map((u) => u.name).join(", "))} ${inside.length > 1 ? "piszą" : "pisze"} teraz</span>` : ""}</p>
+        <div class="hero-go">${todayCard ? `<button class="btn primary big" data-open="${todayCard.id}">${icon("write", 16)}<span>Otwórz dzisiejszą lekcję</span></button>` : `<button class="btn primary big" data-new-lesson="${heroSub.id}">${icon("write", 16)}<span>${isNow ? "Zacznij dzisiejszą lekcję" : "Nowa lekcja"}</span></button>`}${!todayCard && last ? `<button class="btn big" data-open="${last.id}">Ostatnia lekcja</button>` : ""}<a class="btn big ghost" href="#/s/${heroSub.id}">Wszystkie</a></div></div>
+    </section>` : `<section class="hero"><h1 class="hero-name">Pupka</h1><div class="hero-side"><p>Dodaj pierwszy przedmiot, a potem wpisz plan lekcji.</p><div class="hero-go"><button class="btn primary big" data-new-subject>${icon("plus", 16)}<span>Nowy przedmiot</span></button></div></div></section>`}
+    <div class="plan-chips">${slots.length ? slots.map((x) => `<a href="#/s/${x.s.id}" class="${x.cur ? "cur" : x.past ? "past" : ""}"><b>${esc(x.h)}</b>${esc(x.s.name)}</a>`).join("") : `<a href="#/plan" class="quiet">${icon("calendar", 14)}<span>${plan.size ? "Dziś wolne. Plan lekcji" : "Wpisz plan lekcji, a Pupka sama otworzy właściwy przedmiot"}</span></a>`}</div>
+    <div class="home-cols">
+      <section class="toc"><h2>Przedmioty</h2>
+        ${subs.map((s) => { const n = listCards(s.id, "lesson").length; const who = whoOnSubject(s.id); return `<div class="toc-row"><a href="#/s/${s.id}" class="toc-link"><span class="toc-name">${esc(s.name)}</span><span class="toc-dots"></span>${who.length ? presenceHtml(who, 18) : ""}<span class="toc-n">${n}</span></a><button class="icon-btn toc-add" data-new-lesson="${s.id}" title="Nowa lekcja z ${esc(s.name)}">${icon("plus", 15)}</button><button class="icon-btn toc-more" data-subject-menu="${s.id}" title="Opcje">${icon("more", 15)}</button></div>`; }).join("")}
+        <button class="toc-new" data-new-subject>${icon("plus", 15)}<span>Nowy przedmiot</span></button>
+      </section>
+      <section class="recent"><h2>Ostatnie kartki</h2>
+        <div class="thumbs">${recent.length ? recent.map((c) => { const s = subject(c.subject); const who = whoOn(c.id); return `<a class="thumb" href="#/c/${c.id}"><small>${esc(s ? s.name : "")}${c.kind === "test" ? " · na ocenę" : ""}</small><b>${esc(cardLabel(c))}</b><p>${esc(snippet(c))}</p>${c.img ? `<img src="${esc(c.img)}" alt="" loading="lazy">` : ""}<span class="th-foot"><span>${esc(fmtDate(c.date))}</span>${presenceHtml(who, 18)}</span></a>`; }).join("") : `<div class="empty-list">Tu pojawią się ostatnio pisane kartki.</div>`}</div>
+      </section>
     </div>
     <img class="watermark home-wm" src="assets/gzowo-labs-fire.gif" alt="Gzowo Labs">
   </main>`;
@@ -182,6 +212,7 @@ export function renderSubject(root, sid, tab) {
   const isTests = tab === "tests";
   root.innerHTML = `${topbar({ back: "#/", title: `<span class="tb-crumb">${esc(s.emoji || "")} ${esc(s.name)}</span>`, right: homeRight() })}
   <main class="subject">
+    <h1 class="page-title">${esc(s.name)}</h1>
     <div class="subject-head">
       <nav class="tabs"><a href="#/s/${sid}" class="${isTests ? "" : "on"}">Lekcje<small>${lessons.length}</small></a><a href="#/s/${sid}?tab=tests" class="${isTests ? "on" : ""}">Na ocenę<small>${groups.length}</small></a></nav>
       ${isTests ? `<button class="btn primary" data-new-test>${icon("plus", 16)}<span>Nowy test</span></button>` : `<button class="btn primary" data-new-lesson>${icon("plus", 16)}<span>Nowa lekcja</span></button>`}
@@ -190,7 +221,7 @@ export function renderSubject(root, sid, tab) {
       <p class="muted lead">Każdy test to trzy karty, po jednej na osobę. Cudzą kartę można tylko oglądać.</p>
       <div class="rows">${groups.length ? groups.map((g) => `<div class="row test-row"><span class="row-date">${esc(fmtDate(g.date))}</span><span class="row-main"><span class="row-title">${esc(g.name)}</span><span class="row-sub">${esc(g.kind)}</span></span><span class="test-cards">${NAMES.map((n) => { const c = g.cards.find((x) => x.owner === n); const p = users.get(n) || {}; return c ? `<a class="chip ${n === me() ? "mine" : ""}" href="#/c/${c.id}" style="--c:${p.color || "#888"}">${avatarHtml({ name: n, color: p.color, avatar: p.avatar }, 20)}<span>${n}</span>${presenceHtml(whoOn(c.id), 16)}</a>` : ""; }).join("")}</span><button class="icon-btn row-more" data-test-menu="${g.group}" title="Opcje">${icon("more")}</button></div>`).join("") : `<div class="empty-list">Jeszcze nic na ocenę. Nowy test tworzy trzy karty naraz.</div>`}</div>
     ` : `
-      <div class="rows">${lessons.length ? lessons.map((c) => `<a class="row" href="#/c/${c.id}"><span class="row-date">${esc(fmtDate(c.date))}</span><span class="row-main"><span class="row-title">${esc(c.title || "bez tematu")}</span></span><span class="row-presence">${presenceHtml(whoOn(c.id), 20)}</span><button class="icon-btn row-more" data-card-menu="${c.id}" title="Opcje">${icon("more")}</button></a>`).join("") : `<div class="empty-list">Pusto. Pierwsza lekcja zacznie się od „Temat:”.</div>`}</div>
+      <div class="rows">${lessons.length ? lessons.map((c) => `<a class="row" href="#/c/${c.id}"><span class="row-date">${esc(fmtDate(c.date))}</span><span class="row-main"><span class="row-title">${esc(cardLabel(c))}</span>${snippet(c, 110) && c.title ? `<span class="row-sub">${esc(snippet(c, 110))}</span>` : ""}</span><span class="row-presence">${presenceHtml(whoOn(c.id), 20)}</span><button class="icon-btn row-more" data-card-menu="${c.id}" title="Opcje">${icon("more")}</button></a>`).join("") : `<div class="empty-list">Pusto. Pierwsza lekcja zacznie się od „Temat:”.</div>`}</div>
     `}
   </main>`;
   root.querySelector("main").addEventListener("click", (e) => {
@@ -217,8 +248,8 @@ export function renderPlan(root) {
   const hs = hours();
   const subs = listSubjects();
   const now = nowLesson();
-  root.innerHTML = `${topbar({ back: "#/", title: `<span class="tb-crumb">Plan lekcji</span>`, right: homeRight() })}
-  <main class="plan"><p class="muted lead">Kliknij komórkę i wybierz przedmiot. Godziny zmienisz w ustawieniach.</p>
+  root.innerHTML = `${topbar({ title: "", right: homeRight(), nav: navHtml("plan") })}
+  <main class="plan"><h1 class="page-title">Plan lekcji</h1><p class="muted lead">Kliknij komórkę i wybierz przedmiot. Godziny zmienisz w ustawieniach.</p>
   <table class="plan-grid"><thead><tr><th></th>${DAYS.map((d) => `<th>${d}</th>`).join("")}</tr></thead><tbody>${hs.map((h, i) => `<tr><th><b>${i + 1}</b><small>${esc(h)}</small></th>${DAYS.map((_, d) => { const sid = plan.get(`${d + 1}-${i}`); const s = sid ? subject(sid) : null; const isNow = now && now.day === d + 1 && now.slot === i; return `<td><button data-cell="${d + 1}-${i}" class="${s ? "" : "empty"} ${isNow ? "now" : ""}">${s ? `${esc(s.emoji || "")} ${esc(s.name)}` : ""}</button></td>`; }).join("")}</tr>`).join("")}</tbody></table></main>`;
   root.querySelector("main").addEventListener("click", (e) => {
     const b = e.target.closest("[data-cell]");
@@ -230,8 +261,8 @@ export function renderPlan(root) {
 
 export function renderTrash(root) {
   const items = trashItems();
-  root.innerHTML = `${topbar({ back: "#/", title: `<span class="tb-crumb">Kosz</span>`, right: homeRight() })}
-  <main class="trash"><p class="muted lead">Rzeczy znikają na dobre po 30 dniach.</p>
+  root.innerHTML = `${topbar({ title: "", right: homeRight(), nav: navHtml("trash") })}
+  <main class="trash"><h1 class="page-title">Kosz</h1><p class="muted lead">Rzeczy znikają na dobre po 30 dniach.</p>
   <div class="rows">${items.length ? items.map((it) => `<div class="row"><span class="row-date">${it.type === "subject" ? "przedmiot" : esc(fmtDate(it.date))}</span><span class="row-main"><span class="row-title">${esc(it.type === "subject" ? `${it.emoji || ""} ${it.name}` : (it.title || it.name || "bez tematu"))}</span>${it.type === "card" && subject(it.subject) ? `<span class="row-sub">${esc(subject(it.subject).name)}${it.owner ? " · " + esc(it.owner) : ""}</span>` : ""}</span><button class="btn small" data-restore="${it.type}:${it.id}">${icon("restore", 14)}<span>Przywróć</span></button></div>`).join("") : `<div class="empty-list">Kosz jest pusty.</div>`}</div></main>`;
   root.querySelector("main").addEventListener("click", (e) => {
     const b = e.target.closest("[data-restore]");
@@ -249,7 +280,7 @@ export function renderSettings(root) {
   root.innerHTML = `${topbar({ back: "#/", title: `<span class="tb-crumb">Ustawienia</span>`, right: homeRight() })}
   <main class="settings">
     <section><div class="eyebrow">Wspólne dla trzech</div>
-      <label>Domyślna czcionka<select data-set="font">${FONTS.map((f) => `<option ${(settings.get("font") || "Montserrat") === f ? "selected" : ""}>${f}</option>`).join("")}</select></label>
+      <label>Domyślna czcionka<select data-set="font">${FONTS.map((f) => `<option ${(settings.get("font") || "Newsreader") === f ? "selected" : ""}>${f}</option>`).join("")}</select></label>
       <label>Godziny lekcji<div class="hours">${hs.map((h, i) => `<input data-hour="${i}" value="${esc(h)}" size="5">`).join("")}</div></label>
     </section>
     <section><div class="eyebrow">Ja: ${esc(name)}</div>

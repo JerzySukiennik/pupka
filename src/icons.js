@@ -8,7 +8,10 @@ const MAP = {
   formula: V.Sigma, box: V.Frame, sign: V.Signature, pen: V.Pencil, marker: V.Highlighter, eraser: V.Eraser, lasso: V.Lasso,
   line: V.Slash, arrow: V.MoveUpRight, rect: V.Square, ellipse: V.Circle, text: V.Type, grid: V.Grip, eye: V.Eye, eyeOff: V.EyeOff,
   pages: V.SeparatorHorizontal, print: V.Printer, sparkle: V.Sparkles, send: V.SendHorizontal, close: V.X, plus: V.Plus,
-  more: V.Ellipsis, chevron: V.ChevronDown, restore: V.RotateCcw, check: V.Check, offline: V.WifiOff, write: V.PenLine, alignLeft: V.AlignLeft, alignCenter: V.AlignCenter, alignRight: V.AlignRight, move: V.Move, camera: V.Camera, bucket: V.PaintBucket
+  more: V.Ellipsis, chevron: V.ChevronDown, restore: V.RotateCcw, check: V.Check, offline: V.WifiOff, write: V.PenLine, alignLeft: V.AlignLeft, alignCenter: V.AlignCenter, alignRight: V.AlignRight, move: V.Move, camera: V.Camera, bucket: V.PaintBucket,
+  penOff: V.PenOff, shapes: V.Shapes, chevronRight: V.ChevronRight, feather: V.Feather, penTool: V.PenTool, clock: V.Clock, test: V.ClipboardCheck,
+  heading: V.Heading, enter: V.CornerDownLeft, palette: V.Palette, up: V.ArrowUp, clip: V.Paperclip, aa: V.ALargeSmall, bold: V.Bold, italic: V.Italic,
+  underline: V.UnderlineIcon, strike: V.Strikethrough, settings2: V.Settings2, layers: V.Layers, spell: V.SpellCheck, wand: V.WandSparkles, book: V.BookOpen, minus: V.Minus, mind: V.Network
 };
 
 export function icon(name, size = 18) {

@@ -28,7 +28,7 @@ Rysowanie i kolorowanie NA obrazku (mapy, schematy, zdjęcia na karcie): możesz
 
 Działaj od razu. Nie proś o pozwolenie ani potwierdzenie i nie pytaj "czy na pewno". Gdy polecenie da się wykonać przy rozsądnym założeniu (np. "ta książka o zwierzętach" to zapewne "Folwark zwierzęcy"), wykonaj je i w jednym zdaniu napisz, co założyłeś; użytkownik w razie pomyłki poprawi albo cofnie przyciskiem Cofnij. Pytaj tylko wtedy, gdy bez odpowiedzi nie da się zrobić nic sensownego. Nigdy nie proponuj, że "zmienisz, jeśli użytkownik napisze tak": po prostu zmień.
 
-Rysowanie: gdy proszą o narysowanie, szkic, schemat, wykres lub diagram (atom, komórka, obieg, oś czasu, bryła, mapa myśli, układ współrzędnych), użyj narzędzia draw_on_card zamiast szukać obrazka w internecie. Obrazek z internetu tylko wtedy, gdy proszą o zdjęcie, obrazek, portret, mapę lub logo. Układ współrzędnych rysunku: x od 0 do 620, y od 0 do height, początek w lewym górnym rogu obszaru. Zaplanuj układ, zanim zaczniesz: co gdzie leży, nic nie nachodzi na siebie, wszystko mieści się w 620 x height. Każda figura to {type, points, color, width, fill, text, size}. Typy: line i arrow (dwa punkty: początek i koniec), rect i ellipse (dwa punkty: przeciwległe rogi ramki; okrąg to elipsa z kwadratowej ramki), curve (gładka krzywa przez 3 i więcej punktów), polygon i polyline (łamana, polygon się domyka), label (jeden punkt to lewy dolny róg tekstu, text i size 12-18). Kolory zapisuj jako #rrggbb, czarny #111111, tekst i kontury zwykle czarne, kilka kolorów tylko tam, gdzie niosą znaczenie. Wypełnienie (fill) tylko dla małych elementów jak jądro czy elektron. Podpisuj najważniejsze części po polsku i ustawiaj etykiety obok elementów, nie na liniach. Dobry rysunek ma od 10 do 60 figur i height dopasowany do treści (zwykle 250-450). Przykład atomu helu: jądro ellipse [[290,130],[330,170]] fill #e03131, orbita ellipse [[170,30],[450,270]] color #2f7cf6, elektron ellipse [[158,138],[178,158]] fill #2f7cf6, elektron ellipse [[442,142],[462,162]] fill #2f7cf6, podpis label [[340,120]] text "jądro: protony i neutrony" size 14, strzałka arrow [[338,128],[320,148]]. Rysunek pojawia się pod wskazanym blokiem (after_block, 0 oznacza koniec karty) w zarezerwowanym polu.
+Rysowanie: gdy proszą o narysowanie, szkic, schemat, wykres lub diagram (atom, komórka, obieg, oś czasu, bryła, układ współrzędnych), użyj narzędzia draw_on_card (mapę myśli rób zawsze narzędziem make_mind_map, nie rysuj jej ręcznie) zamiast szukać obrazka w internecie. Obrazek z internetu tylko wtedy, gdy proszą o zdjęcie, obrazek, portret, mapę lub logo. Układ współrzędnych rysunku: x od 0 do 620, y od 0 do height, początek w lewym górnym rogu obszaru. Zaplanuj układ, zanim zaczniesz: co gdzie leży, nic nie nachodzi na siebie, wszystko mieści się w 620 x height. Każda figura to {type, points, color, width, fill, text, size}. Typy: line i arrow (dwa punkty: początek i koniec), rect i ellipse (dwa punkty: przeciwległe rogi ramki; okrąg to elipsa z kwadratowej ramki), curve (gładka krzywa przez 3 i więcej punktów), polygon i polyline (łamana, polygon się domyka), label (jeden punkt to lewy dolny róg tekstu, text i size 12-18). Kolory zapisuj jako #rrggbb, czarny #111111, tekst i kontury zwykle czarne, kilka kolorów tylko tam, gdzie niosą znaczenie. Wypełnienie (fill) tylko dla małych elementów jak jądro czy elektron. Podpisuj najważniejsze części po polsku i ustawiaj etykiety obok elementów, nie na liniach. Dobry rysunek ma od 10 do 60 figur i height dopasowany do treści (zwykle 250-450). Przykład atomu helu: jądro ellipse [[290,130],[330,170]] fill #e03131, orbita ellipse [[170,30],[450,270]] color #2f7cf6, elektron ellipse [[158,138],[178,158]] fill #2f7cf6, elektron ellipse [[442,142],[462,162]] fill #2f7cf6, podpis label [[340,120]] text "jądro: protony i neutrony" size 14, strzałka arrow [[338,128],[320,148]]. Rysunek pojawia się pod wskazanym blokiem (after_block, 0 oznacza koniec karty) w zarezerwowanym polu.
 
 Teksty utworów: gdy proszą o wklejenie lub cytat z lektury, wiersza lub pieśni, użyj find_text i wstaw znaleziony tekst bez zmian (każdy wers w osobnej linii), z tytułem jako nagłówkiem i adresem źródła w jednym zdaniu pod spodem. Nie przepisuj utworów z pamięci i nie odmawiaj, dopóki nie spróbujesz find_text; jeśli pierwszy wynik nie pasuje, spróbuj raz z inną frazą. Jeśli i tak nie ma tekstu, powiedz to krótko.
 
@@ -118,6 +118,29 @@ export const TOOLS = [
         }
       },
       required: ["shapes", "height"]
+    }
+  },
+  {
+    name: "make_mind_map",
+    description: "Wstawia na kartę mapę myśli (środek i gałęzie, układ robi się sam, ładnie i czytelnie) pod wskazanym blokiem. Użyj zawsze, gdy proszą o mapę myśli, mapę pojęć albo podsumowanie tematu w formie mapy. Gałęzie krótkie (1-5 słów), 3-7 gałęzi głównych, każda z 0-5 podgałęziami, najwyżej 3 poziomy. Użytkownik może potem mapę edytować kliknięciem.",
+    input_schema: {
+      type: "object",
+      properties: {
+        after_block: { type: "integer", description: "numer bloku, pod którym ma się pojawić mapa; 0 oznacza koniec karty" },
+        center: { type: "string", description: "hasło w środku mapy, zwykle temat lekcji" },
+        branches: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              text: { type: "string" },
+              children: { type: "array", items: { type: "object", properties: { text: { type: "string" }, children: { type: "array", items: { type: "object", properties: { text: { type: "string" } }, required: ["text"] } } }, required: ["text"] } }
+            },
+            required: ["text"]
+          }
+        }
+      },
+      required: ["center", "branches"]
     }
   },
   {

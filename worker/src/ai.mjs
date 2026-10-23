@@ -33,6 +33,7 @@ async function anthropicStream(env, body, onEvent) {
   let usage = {};
   let stop = null;
   while (true) {
+    if (onEvent.closed) { try { await reader.cancel(); } catch (e) { /* gone */ } break; }
     const { value, done } = await reader.read();
     if (done) break;
     buf += dec.decode(value, { stream: true });
@@ -48,6 +49,7 @@ async function anthropicStream(env, body, onEvent) {
       else if (ev.type === "content_block_start") {
         const b = ev.content_block;
         blocks[ev.index] = b.type === "tool_use" ? { type: "tool_use", id: b.id, name: b.name, json: "" } : { type: b.type, text: "" };
+        if (b.type === "tool_use") onEvent({ t: "tool", name: b.name });
       } else if (ev.type === "content_block_delta") {
         const b = blocks[ev.index];
         if (!b) continue;
@@ -228,6 +230,7 @@ export async function chat(req, env, origin, sse) {
   let usd = 0;
   let edited = false;
   for (let round = 0; round < 6; round++) {
+    if (sse.closed) break;
     const model = p.visual && env.VISION_MODEL ? env.VISION_MODEL : MODEL;
     const res = await anthropicStream(env, { model, max_tokens: 12000, system, messages, tools: TOOLS, output_config: { effort: p.visual ? "high" : "medium" } }, sse);
     usd += usdOf(res.usage, model);
@@ -288,6 +291,12 @@ export async function chat(req, env, origin, sse) {
           sse({ t: "drawings", author: t.input.author ? String(t.input.author).slice(0, 20) : null, block: t.input.on_image ? t.input.on_image | 0 : 0 });
           edited = true;
           result = t.input.on_image ? "Rysunki z obrazka usunięte." : "Rysunki usunięte z karty.";
+        } else if (t.name === "make_mind_map") {
+          const conv = (n, d) => ({ t: String((n && n.text) || "").slice(0, 120), k: d < 3 && n && Array.isArray(n.children) ? n.children.slice(0, 10).map((c) => conv(c, d + 1)) : [] });
+          const tree = { t: String(t.input.center || "").slice(0, 120), k: (Array.isArray(t.input.branches) ? t.input.branches.slice(0, 10) : []).map((b) => conv(b, 1)) };
+          sse({ t: "mind", after_block: t.input.after_block || 0, tree });
+          edited = true;
+          result = tree.k.length ? `Mapa myśli wstawiona (${tree.k.length} gałęzi).` : "Mapa myśli bez gałęzi, dodaj gałęzie.";
         } else if (t.name === "edit_card") {
           const ops = Array.isArray(t.input.ops) ? t.input.ops.slice(0, 60) : [];
           sse({ t: "edit", ops });

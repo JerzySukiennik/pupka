@@ -3,8 +3,9 @@
 import { esc } from "./md.js";
 import { icon } from "./icons.js";
 
-export function topbar({ back, title, right }) {
-  return `<header class="topbar"><div class="tb-l">${back ? `<a class="icon-btn back" href="${back}" title="Wstecz">${icon("back")}</a>` : `<a class="logo" href="#/">Pupka</a>`}<div class="tb-title">${title || ""}</div></div><div class="tb-r">${right || ""}</div></header>`;
+export function topbar({ back, title, right, nav }) {
+  const left = back ? `<a class="icon-btn back" href="${back}" title="Wstecz">${icon("back")}</a><div class="tb-title">${title || ""}</div>` : `<a class="logo" href="#/">${icon("feather", 18)}<span>Pupka</span></a>${nav ? `<nav class="tb-nav">${nav}</nav>` : ""}`;
+  return `<header class="topbar"><div class="tb-l">${left}</div><div class="tb-r">${right || ""}</div></header>`;
 }
 
 export function avatarHtml(user, size = 28, extraClass = "") {

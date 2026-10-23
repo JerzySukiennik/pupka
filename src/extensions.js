@@ -1,6 +1,6 @@
 /* Custom TipTap pieces: block ids for drawing anchors, KaTeX math, callouts, test header, resizable images, extra markdown shortcuts. */
 
-import { Node, Extension, mergeAttributes, InputRule, wrappingInputRule, Plugin, PluginKey, katex, Image, NodeSelection } from "../lib/vendor.js";
+import { Node, Extension, mergeAttributes, InputRule, wrappingInputRule, Plugin, PluginKey, katex, Image, NodeSelection, TextSelection } from "../lib/vendor.js";
 import { uid } from "./store.js";
 import { icon } from "./icons.js";
 
@@ -429,5 +429,30 @@ export const Shortcuts = Extension.create({
       delimRule(/(\^([^^\s][^^\n]*?)\^)$/, "superscript"),
       delimRule(/(?:^|[^~])(~([^~\s][^~\n]*?)~)$/, "subscript")
     ];
+  },
+  addKeyboardShortcuts() {
+    return {
+      Backspace: ({ editor }) => {
+        const { state, view } = editor;
+        const { selection } = state;
+        if (!selection.empty) return false;
+        const $c = selection.$from;
+        if ($c.depth !== 1 || $c.parentOffset !== 0 || $c.parent.type.name !== "paragraph") return false;
+        const idx = $c.index(0);
+        if (idx === 0) return false;
+        const prev = state.doc.child(idx - 1);
+        if (prev.type.name !== "bulletList" && prev.type.name !== "orderedList") return false;
+        const prevStart = $c.before(1) - prev.nodeSize;
+        let end = null;
+        prev.descendants((n, pos) => { if (n.isTextblock) end = prevStart + 1 + pos + 1 + n.content.size; });
+        if (end == null) return false;
+        const para = $c.parent;
+        const tr = state.tr.delete($c.before(1), $c.after(1));
+        if (para.content.size) tr.insert(end, para.content);
+        tr.setSelection(TextSelection.create(tr.doc, end));
+        view.dispatch(tr.scrollIntoView());
+        return true;
+      }
+    };
   }
 });

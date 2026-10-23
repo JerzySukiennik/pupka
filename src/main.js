@@ -81,7 +81,7 @@ if (saved && NAMES.includes(saved) && (users.get(saved) || {}).color) { setMe(sa
 window.addEventListener("beforeprint", () => document.body.classList.add("printing"));
 window.addEventListener("afterprint", () => document.body.classList.remove("printing"));
 
-const WATCH = ["/index.html", "/src/main.js", "/src/card.js", "/src/spell.js", "/src/draw.js", "/src/home.js", "/src/store.js", "/styles.css"];
+const WATCH = ["/index.html", "/src/main.js", "/src/card.js", "/src/ai.js", "/src/spell.js", "/src/draw.js", "/src/home.js", "/src/store.js", "/styles.css"];
 async function signature() {
   const parts = await Promise.all(WATCH.map((f) => fetch(f, { cache: "no-store" }).then((r) => (r.ok ? r.text() : "")).catch(() => "")));
   let h = 0;
@@ -89,21 +89,15 @@ async function signature() {
   return parts.every((t) => !t) ? null : String(h);
 }
 if (!/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) {
-  let base = null;
+  let base = null, stale = false;
   signature().then((sig) => { base = sig; });
-  let shown = false;
   const check = async () => {
-    if (shown || !base) return;
+    if (stale || !base) return;
     const now = await signature();
-    if (now && now !== base) {
-      shown = true;
-      const bar = document.createElement("div");
-      bar.className = "update-bar";
-      bar.innerHTML = `<span>Jest nowa wersja Pupki.</span><button class="btn small primary">Odśwież</button>`;
-      bar.querySelector("button").addEventListener("click", async () => { await Promise.all(WATCH.concat(["/lib/vendor.js"]).map((f) => fetch(f, { cache: "reload" }).catch(() => null))); location.reload(); });
-      document.body.appendChild(bar);
-    }
+    if (now && now !== base) stale = true;
   };
+  const refresh = async () => { await Promise.all(WATCH.concat(["/lib/vendor.js"]).map((f) => fetch(f, { cache: "reload" }).catch(() => null))); location.reload(); };
+  window.addEventListener("hashchange", () => { if (stale) refresh(); });
   setInterval(check, 4 * 60 * 1000);
-  document.addEventListener("visibilitychange", () => { if (!document.hidden) check(); });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) return; if (stale && !location.hash.startsWith("#/c/")) refresh(); else check(); });
 }

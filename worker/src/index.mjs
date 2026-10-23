@@ -116,7 +116,7 @@ export default {
       const { readable, writable } = new TransformStream();
       const writer = writable.getWriter();
       const enc = new TextEncoder();
-      const sse = (obj) => writer.write(enc.encode("data: " + JSON.stringify(obj) + "\n\n")).catch(() => {});
+      const sse = (obj) => (sse.closed ? Promise.resolve() : writer.write(enc.encode("data: " + JSON.stringify(obj) + "\n\n")).catch(() => { sse.closed = true; }));
       (async () => {
         try { await chat(req, env, url.origin, sse); } catch (e) { await sse({ t: "error", message: e.message }); }
         try { await writer.close(); } catch (e) { /* closed */ }

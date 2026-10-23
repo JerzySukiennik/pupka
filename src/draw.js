@@ -4,6 +4,7 @@
 import { Y, getStroke } from "../lib/vendor.js";
 import { uid } from "./store.js";
 import { loadPixels, floodRegion, maskToRings } from "./fill.js";
+import { mindMarkup } from "./mind.js";
 
 export const SIZES = [2, 4, 8];
 export const COLORS = ["#111111", "#2f7cf6", "#e03131", "#1fa463", "#f28c28", "#a855f7", "#0fb5c9", "#ffd43b"];
@@ -95,7 +96,8 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
   const st = {
     active: false, tool: "pen", color: color || "#111", size: 4,
     grid: localStorage.getItem("pupka-grid") === "1",
-    selection: new Set(), clipboard: null, drawing: null, spaceDown: false
+    selection: new Set(), clipboard: null, drawing: null, spaceDown: false,
+    eraseMode: localStorage.getItem("pupka-erase") === "stroke" ? "stroke" : "part"
   };
   pageEl.classList.toggle("grid", st.grid);
   const els = new Map();
@@ -103,8 +105,10 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
   let raf = 0;
 
   let imgs = new Map();
+  let pmW = 640;
   function layout() {
     tops = new Map();
+    pmW = pmEl.clientWidth || pmW;
     for (const el of pmEl.children) if (el.dataset && el.dataset.bid) tops.set(el.dataset.bid, el.offsetTop);
     imgs = new Map();
     const pr = pmEl.getBoundingClientRect();
@@ -128,6 +132,7 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     return { bid: best, top: bestTop };
   }
   function frame(s) {
+    if (s.t === "mind") return { ox: 0, oy: topOf(s), k: Math.min(1, pmW / (s.W || pmW)) };
     if (s.a) {
       const im = imgs.get(s.a);
       if (!im || im.w < 2) return null;
@@ -173,6 +178,10 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
       g.appendChild(svg("path", { d, fill: s.f || s.c || "#2f7cf6", "fill-opacity": s.o == null ? 0.45 : s.o, "fill-rule": "evenodd", stroke: "none" }));
     } else if (s.t === "poly") {
       g.appendChild(svg(s.closed ? "polygon" : "polyline", { points: s.p.map((p) => p.join(",")).join(" "), fill: s.f || "none", stroke: s.c, "stroke-width": w, "stroke-linejoin": "round", "stroke-linecap": "round" }));
+    } else if (s.t === "mind") {
+      const m = mindMarkup(s.tree || { t: "", k: [] }, s.W || 640);
+      g.innerHTML = m.markup;
+      if (s.bid) mindH.set(s.bid, m.H);
     } else if (s.t === "label") {
       const [x, y] = s.p[0];
       const text = svg("text", { x, y, fill: s.c, "font-size": s.w || 16, class: "draw-label", stroke: "#ffffff", "stroke-width": 4, "paint-order": "stroke", "stroke-linejoin": "round" });
@@ -197,7 +206,19 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
       place(id);
     });
     drawSelection();
+    pmEl.querySelectorAll(".draw-spacer").forEach((sp) => {
+      const m = sp.dataset.bid && mindBids.get(sp.dataset.bid);
+      sp.classList.toggle("has-mind", !!m);
+      const mh = m && (mindH.get(sp.dataset.bid) || m.H);
+      if (m && m.W && mh) { const h = Math.round(mh * Math.min(1, pmW / m.W) + 16) + "px"; if (sp.style.height !== h) sp.style.height = h; }
+    });
   }
+  let mindBids = new Map();
+  const mindH = new Map();
+  const indexMinds = () => { mindBids = new Map(); strokes.forEach((s) => { if (s.t === "mind" && s.bid) mindBids.set(s.bid, s); }); };
+  strokes.observe(indexMinds);
+  indexMinds();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { for (const [id, e] of els) if (e.s.t === "mind") { e.g.remove(); els.delete(id); } schedule(); });
   function schedule() {
     if (raf) return;
     const run = () => { if (!raf) return; raf = 0; layout(); renderAll(); };
@@ -394,6 +415,7 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
   function eraseAt(p) {
     const hit = [];
     strokes.forEach((s, id) => {
+      if (s.t === "mind") return;
       const pts = absPts(s);
       if (!pts.length) return;
       if (s.t === "area") {
@@ -422,7 +444,43 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
       for (let i = 1; i < pts.length; i++) if (segDist(p, pts[i - 1], pts[i]) < r) { hit.push(id); return; }
       if (pts.length === 1 && dist(p, pts[0]) < r) hit.push(id);
     });
-    if (hit.length) tx(() => hit.forEach((id) => strokes.delete(id)));
+    if (!hit.length) return;
+    const cut = new Map();
+    const gone = [];
+    for (const id of hit) {
+      const parts = st.eraseMode === "part" ? splitAt(strokes.get(id), p) : null;
+      if (parts === false) continue;
+      if (parts) cut.set(id, parts);
+      gone.push(id);
+    }
+    if (gone.length) ydoc.transact(() => gone.forEach((id) => {
+      const parts = cut.get(id);
+      strokes.delete(id);
+      if (parts) for (const r of parts) strokes.set(uid(), r);
+    }), "draw");
+  }
+  function splitAt(s, p) {
+    if (!["pen", "hl", "line", "arrow"].includes(s.t) && !(s.t === "poly" && !s.closed)) return null;
+    const f = frame(s);
+    if (!f) return null;
+    const lp = [(p[0] - f.ox) / f.k, (p[1] - f.oy) / f.k];
+    const rl = (ERASE_R + (s.t === "hl" ? (s.w || 4) * 2 : (s.w || 4) / 2)) / f.k;
+    const dense = [];
+    for (let i = 0; i < s.p.length; i++) {
+      if (i) { const a = s.p[i - 1], b = s.p[i], n = Math.floor(dist(a, b) / 1.5); for (let j = 1; j < n; j++) dense.push([a[0] + (b[0] - a[0]) * j / n, a[1] + (b[1] - a[1]) * j / n]); }
+      dense.push(s.p[i]);
+    }
+    const runs = [];
+    let cur = [];
+    for (const q of dense) { if (dist(q, lp) < rl) { if (cur.length) runs.push(cur); cur = []; } else cur.push(q); }
+    if (cur.length) runs.push(cur);
+    if (runs.length === 1 && runs[0].length === dense.length) return false;
+    const now = Date.now();
+    return runs.filter((r) => r.length > 1 && pathLength(r) > 2).map((r, i, all) => {
+      const pts = r.map(([x, y]) => [r1(x), r1(y)]);
+      if (s.t === "line" || s.t === "arrow") return Object.assign({}, s, { t: s.t === "arrow" && r[r.length - 1] === dense[dense.length - 1] ? "arrow" : "line", p: [pts[0], pts[pts.length - 1]], ts: now });
+      return Object.assign({}, s, { p: pts.length > 3 ? rdp(pts, 0.35) : pts, ts: now });
+    });
   }
 
   let labelInput = null;
@@ -492,7 +550,7 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
       return;
     }
     if (tool === "fill") { fillAtPoint(p); return; }
-    if (tool === "eraser") { st.drawing = { tool, last: p }; eraseAt(p); return; }
+    if (tool === "eraser") { undo.stopCapturing(); st.drawing = { tool, last: p }; eraseAt(p); return; }
     if (tool === "lasso") {
       const b = selectionBounds();
       if (b && p[0] >= b.x0 - 6 && p[0] <= b.x1 + 6 && p[1] >= b.y0 - 6 && p[1] <= b.y1 + 6) { st.drawing = { tool: "move", start: p, last: p, dx: 0, dy: 0 }; return; }
@@ -540,7 +598,7 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     const d = st.drawing;
     if (!d) return;
     st.drawing = null;
-    if (d.tool === "eraser") return;
+    if (d.tool === "eraser") { undo.stopCapturing(); return; }
     if (d.tool === "move") {
       if (Math.abs(d.dx) > 0.5 || Math.abs(d.dy) > 0.5) moveSelection(d.dx, d.dy);
       else for (const id of st.selection) place(id);
@@ -554,6 +612,7 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
       if (d.pts.length < 4) return;
       const poly = d.pts;
       strokes.forEach((s, id) => {
+        if (s.t === "mind") return;
         const pts = absPts(s);
         if (!pts.length) return;
         let test = pts;
@@ -611,13 +670,14 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     setSize(w) { st.size = w; onChange && onChange(api.getState()); },
     setSpace(v) { st.spaceDown = v; capture.style.pointerEvents = st.active && !v ? "auto" : "none"; },
     toggleGrid() { st.grid = !st.grid; localStorage.setItem("pupka-grid", st.grid ? "1" : "0"); pageEl.classList.toggle("grid", st.grid); onChange && onChange(api.getState()); },
-    getState() { return { active: st.active, tool: st.tool, color: st.color, size: st.size, grid: st.grid, selection: st.selection.size }; },
+    setEraseMode(m) { st.eraseMode = m === "stroke" ? "stroke" : "part"; try { localStorage.setItem("pupka-erase", st.eraseMode); } catch (e) { /* storage blocked */ } st.tool = "eraser"; clearSelection(); applyMode(); },
+    getState() { return { active: st.active, tool: st.tool, color: st.color, size: st.size, grid: st.grid, selection: st.selection.size, eraseMode: st.eraseMode }; },
     undo() { undo.undo(); },
     redo() { undo.redo(); },
     canUndo() { return undo.canUndo(); },
     deleteSelection, copySelection, paste, clearSelection,
     hasSelection() { return st.selection.size > 0; },
-    selectAll() { st.selection = new Set(strokes.keys()); drawSelection(); },
+    selectAll() { st.selection = new Set(Array.from(strokes.entries()).filter(([, x]) => x.t !== "mind").map(([id]) => id)); drawSelection(); },
     count() { return strokes.size; },
     fillImage,
     imageSig(bid) { let n = 0, t = 0; strokes.forEach((s) => { if (s.a === bid) { n++; t = Math.max(t, s.ts || 0); } }); const im = imgs.get(bid); return n + ":" + t + ":" + (im ? Math.round(im.w) : 0); },
@@ -671,7 +731,7 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
           const x0 = Math.min(pts[0][0], pts[1][0]), x1 = Math.max(pts[0][0], pts[1][0]), y0 = Math.min(pts[0][1], pts[1][1]), y1 = Math.max(pts[0][1], pts[1][1]);
           const bw = Math.max(20, x1 - x0 - 12), bh = Math.max(12, y1 - y0 - 8);
           const meas = document.createElement("canvas").getContext("2d");
-          const widthOf = (t, fs) => { meas.font = fs + "px Montserrat, sans-serif"; return meas.measureText(t).width; };
+          const widthOf = (t, fs) => { meas.font = fs + "px " + ((getComputedStyle(pageEl).getPropertyValue("--doc-font") || "").trim() || "Newsreader") + ", serif"; return meas.measureText(t).width; };
           let size = clamp(sh.size || 16, 9, 28), lines = [txt];
           for (; size >= 9; size--) {
             const words = txt.split(" "), out = [];
@@ -714,10 +774,14 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
       clearSelection();
       return ids.length;
     },
+    mindAt(bid) { let hit = null; strokes.forEach((s, id) => { if (!hit && s.t === "mind" && s.bid === bid) hit = { id, s }; }); return hit; },
+    contentWidth() { layout(); return pmW; },
+    putMind(id, bid, tree, W, H) { ydoc.transact(() => strokes.set(id || uid(), { t: "mind", tree, W, H, bid, fy: 0, sp: 1, p: [[0, 0], [W, H]], c: "#2a2724", w: 2, by: name, ts: Date.now() }), "draw"); },
+    removeStroke(id) { ydoc.transact(() => strokes.delete(id), "draw"); },
     summary() {
       if (!strokes.size) return "";
       const by = {}, labels = [];
-      strokes.forEach((s) => { by[s.by || "?"] = (by[s.by || "?"] || 0) + 1; if (s.t === "label" && s.txt) labels.push(String(s.txt).slice(0, 40)); });
+      strokes.forEach((s) => { by[s.by || "?"] = (by[s.by || "?"] || 0) + 1; if (s.t === "label" && s.txt) labels.push(String(s.txt).slice(0, 40)); if (s.t === "mind" && s.tree) labels.push("mapa myśli: " + String(s.tree.t).slice(0, 40)); });
       return `${strokes.size} elementów (${Object.entries(by).map(([k, v]) => `${k}: ${v}`).join(", ")})` + (labels.length ? `; etykiety: ${labels.slice(0, 15).join(" | ")}` : "");
     },
     addShapes(bid, shapes, opts = {}) {

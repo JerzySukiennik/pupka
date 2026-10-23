@@ -62,8 +62,8 @@ export function dataUrlToBlob(dataUrl) {
   return new Blob([arr], { type: mime });
 }
 
-export async function aiChat(payload, onEvent) {
-  const r = await fetch(API + "/ai/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+export async function aiChat(payload, onEvent, signal) {
+  const r = await fetch(API + "/ai/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload), signal });
   if (!r.ok) {
     const j = await r.json().catch(() => ({}));
     throw new Error(j.error || "AI nie odpowiada (" + r.status + ")");

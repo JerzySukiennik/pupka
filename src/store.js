@@ -9,7 +9,7 @@ export const NAMES = ["Jurek", "Janek", "Jaś"];
 export const CLASS = "8K";
 export const PALETTE = ["#2f7cf6", "#1fa463", "#f28c28", "#a855f7", "#0fb5c9", "#e0457b", "#8d6e3f", "#111111"];
 export const AI_COLOR = "#a855f7";
-export const FONTS = ["Montserrat", "Inter", "Jurek Hand", "Arial", "Georgia", "Times New Roman", "Courier New"];
+export const FONTS = ["Newsreader", "Geist", "Montserrat", "Inter", "Jurek Hand", "Arial", "Georgia", "Times New Roman", "Courier New"];
 export const DEFAULT_HOURS = ["8:00", "8:55", "9:50", "10:45", "11:50", "12:45", "13:40", "14:35", "15:30"];
 export const DAYS = ["Pon", "Wt", "Śr", "Czw", "Pt"];
 
