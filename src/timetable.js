@@ -1,6 +1,6 @@
 /* Built-in timetable of class VIII K (from the paper plan, permanent) and "what is now" with choices for split groups and breaks. */
 
-import { listSubjects } from "./store.js";
+import { listSubjects, users } from "./store.js";
 
 export const SLOTS = [["7:45", "8:30"], ["8:30", "9:15"], ["9:15", "10:00"], ["10:30", "11:15"], ["11:25", "12:10"], ["12:30", "13:15"], ["13:35", "14:20"], ["14:25", "15:10"], ["15:10", "16:00"]];
 export const DAY_NAMES = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek"];
@@ -14,6 +14,12 @@ export const WEEK = {
   5: [[], [POL], [POL], [ANG], [INF, MAT], [MAT, INF], [MAT, KON], ["Hala na Polnej"], ["Hala na Polnej"]]
 };
 const SUBJECT_FOR = { "Testy z matematyki": MAT, "Testy z j. polskiego": POL };
+export const DEFAULT_GROUP = 2;
+
+export function groupOf(name) {
+  const g = name ? (users.get(name) || {}).group : null;
+  return g === 0 || g === 1 || g === 2 ? g : DEFAULT_GROUP;
+}
 
 const norm = (s) => String(s || "").toLowerCase().replace(/\s+/g, " ").trim();
 const mins = (hm) => { const [h, m] = hm.split(":").map(Number); return h * 60 + m; };
@@ -24,13 +30,13 @@ function resolve(label) {
   return { label, sub };
 }
 
-export function lessonsOn(day) {
-  return (WEEK[day] || []).map((opts, i) => ({ i, start: SLOTS[i][0], end: SLOTS[i][1], options: opts.map(resolve) })).filter((l) => l.options.length);
+export function lessonsOn(day, group = 0) {
+  return (WEEK[day] || []).map((opts, i) => ({ i, start: SLOTS[i][0], end: SLOTS[i][1], options: (group && opts.length === 2 ? [opts[group - 1]] : opts).map(resolve) })).filter((l) => l.options.length);
 }
 
-export function lessonNow(date = new Date()) {
+export function lessonNow(date = new Date(), group = 0) {
   const day = date.getDay();
-  const list = lessonsOn(day);
+  const list = lessonsOn(day, group);
   if (!list.length) return null;
   const t = date.getHours() * 60 + date.getMinutes();
   const out = [];

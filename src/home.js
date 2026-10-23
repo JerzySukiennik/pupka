@@ -6,7 +6,7 @@ import { topbar, avatarHtml, presenceHtml } from "./ui.js";
 import { icon } from "./icons.js";
 import { esc } from "./md.js";
 import { userWords, removeUserWord, spellStatus, loadSpeller, reloadSpeller } from "./spell.js";
-import { SLOTS, DAY_NAMES, WEEK, lessonsOn, lessonNow, sameOptions } from "./timetable.js";
+import { SLOTS, DAY_NAMES, WEEK, lessonsOn, lessonNow, sameOptions, groupOf } from "./timetable.js";
 
 const WEEKDAYS = ["niedziela", "poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota"];
 function go(hash) { location.hash = hash; }
@@ -17,7 +17,7 @@ export function renderPicker(root, onPicked) {
   el.className = "picker";
   const d = new Date(), h = d.getHours();
   const greet = h < 5 ? "Późno już" : h < 11 ? "Dzień dobry" : h < 18 ? "Cześć" : "Dobry wieczór";
-  const now = lessonNow();
+  const now = lessonNow(new Date(), groupOf(null));
   const tilt = matchMedia("(hover: hover) and (pointer: fine)").matches;
   const colorOfTile = (n) => (users.get(n) || {}).color || PALETTE[NAMES.indexOf(n)];
   const onlineNames = () => new Set(presence().map((s) => s.user && s.user.name).filter(Boolean));
@@ -168,7 +168,7 @@ function todayChips() {
   const t = d.getHours() * 60 + d.getMinutes();
   const m = (hm) => { const [h, mm] = hm.split(":").map(Number); return h * 60 + mm; };
   const merged = [];
-  for (const l of lessonsOn(d.getDay())) { const last = merged[merged.length - 1]; if (last && sameOptions(last, l) && last.lastSlot === l.i - 1) { last.end = l.end; last.lastSlot = l.i; } else merged.push(Object.assign({}, l, { lastSlot: l.i })); }
+  for (const l of lessonsOn(d.getDay(), groupOf(me()))) { const last = merged[merged.length - 1]; if (last && sameOptions(last, l) && last.lastSlot === l.i - 1) { last.end = l.end; last.lastSlot = l.i; } else merged.push(Object.assign({}, l, { lastSlot: l.i })); }
   return merged.map((l) => Object.assign(l, { cur: t >= m(l.start) && t < m(l.end), past: t >= m(l.end) }));
 }
 function subjectState(sub) {
@@ -177,7 +177,7 @@ function subjectState(sub) {
 }
 
 export function renderHome(root) {
-  const now = lessonNow();
+  const now = lessonNow(new Date(), groupOf(me()));
   const ranked = rankedSubjects();
   const subs = listSubjects();
   const pupkaChoices = now ? now.choices.filter((c) => c.sub) : [];
@@ -191,7 +191,7 @@ export function renderHome(root) {
   const d = new Date();
   const recent = allCards().filter((c) => c.kind === "lesson" || c.owner === me()).sort((a, b) => (b.updated || b.created || 0) - (a.updated || a.created || 0)).slice(0, 6);
   const cap = (w) => w.charAt(0).toUpperCase() + w.slice(1);
-  const kicker = isNow ? `${cap(pupkaChoices[0].when)} · ${pupkaChoices[0].slot}. lekcja · ${pupkaChoices[0].start}-${pupkaChoices[0].end}` : now && !pupkaChoices.length ? `Teraz ${esc(now.choices.map((c) => c.label).join(" albo "))} · ostatnio otwierane` : `${esc(WEEKDAYS[d.getDay()])} · ${esc(fmtDateLong(today()))}`;
+  const kicker = isNow ? `${cap(pupkaChoices[0].when)} · ${pupkaChoices[0].slot}. lekcja · ${pupkaChoices[0].start}-${pupkaChoices[0].end}` : now && !pupkaChoices.length ? `${cap(now.choices[0].when)} ${esc(now.choices.filter((c) => c.when === now.choices[0].when).map((c) => c.label).join(" albo "))} · ostatnio otwierane` : `${esc(WEEKDAYS[d.getDay()])} · ${esc(fmtDateLong(today()))}`;
   const lead = heroSub ? (todayCard ? `Dzisiejsza karta już jest${todayCard.title ? `: ${esc(todayCard.title)}` : ""}.` : last ? `Ostatnio: ${esc(cardLabel(last))}.` : "Jeszcze nie ma tu żadnej lekcji.") : "";
   const choiceHtml = choiceMode ? `<section class="hero choice-hero">
       <div class="kicker">Do wyboru · ${esc(WEEKDAYS[d.getDay()])}</div>
@@ -329,11 +329,12 @@ export function renderSubject(root, sid, tab) {
 }
 
 export function renderPlan(root) {
-  const now = lessonNow();
+  const group = groupOf(me());
+  const now = lessonNow(new Date(), group);
   const today = new Date().getDay();
-  const cell = (opts) => opts.map((label) => { const r = lessonsOn(1).concat(lessonsOn(2), lessonsOn(3), lessonsOn(4), lessonsOn(5)).flatMap((l) => l.options).find((o) => o.label === label); return r && r.sub ? `<a href="#/s/${r.sub.id}">${esc(label)}</a>` : `<span>${esc(label)}</span>`; }).join(" <i>/</i> ");
+  const cell = (opts) => opts.map((label, k) => { const r = lessonsOn(1).concat(lessonsOn(2), lessonsOn(3), lessonsOn(4), lessonsOn(5)).flatMap((l) => l.options).find((o) => o.label === label); const other = group && opts.length === 2 && k !== group - 1 ? " other" : ""; return r && r.sub ? `<a class="${other}" href="#/s/${r.sub.id}">${esc(label)}</a>` : `<span class="${other}">${esc(label)}</span>`; }).join(" <i>/</i> ");
   root.innerHTML = `${topbar({ title: "", right: homeRight(), nav: navHtml("plan") })}
-  <main class="plan"><h1 class="page-title">Plan lekcji VIII K</h1><p class="muted lead">Wbudowany w Pupkę na stałe. Kliknij przedmiot, żeby otworzyć jego lekcje. Gdy w jednej godzinie są dwie grupy albo trwa przerwa, strona główna daje oba przedmioty do wyboru.</p>
+  <main class="plan"><h1 class="page-title">Plan lekcji VIII K</h1><p class="muted lead">Wbudowany w Pupkę na stałe. Kliknij przedmiot, żeby otworzyć jego lekcje. ${group ? `Grupa ${group}: przedmioty innej grupy są przekreślone (grupę zmienisz w Ustawieniach).` : "Ustaw swoją grupę w Ustawieniach, a przy podziale na grupy Pupka pokaże twój przedmiot."} W przerwie strona główna daje do wyboru lekcję, która była, i tę, która będzie.</p>
   <div class="plan-wrap"><table class="plan-grid"><thead><tr><th></th>${DAY_NAMES.map((n, i) => `<th class="${today === i + 1 ? "today" : ""}">${n}</th>`).join("")}</tr></thead><tbody>${SLOTS.map(([a, b], i) => i === 0 && [1, 2, 3, 4, 5].every((d) => !WEEK[d][0].length) ? "" : `<tr><th><b>${i}.</b><small>${a}-${b}</small></th>${[1, 2, 3, 4, 5].map((d) => { const opts = WEEK[d][i] || []; const isNow = now && now.day === d && now.slot && now.slot.i === i; return `<td class="${opts.length ? "" : "empty"} ${isNow ? "now" : ""} ${today === d ? "today" : ""}">${cell(opts)}</td>`; }).join("")}</tr>`).join("")}</tbody></table></div></main>`;
   bindTopbar(root);
 }
@@ -362,6 +363,7 @@ export function renderSettings(root) {
       <label>Domyślna czcionka<select data-set="font">${FONTS.map((f) => `<option ${(settings.get("font") || "Newsreader") === f ? "selected" : ""}>${f}</option>`).join("")}</select></label>
     </section>
     <section><div class="eyebrow">Ja: ${esc(name)}</div>
+      <label>Moja grupa (lekcje dzielone, np. matematyka / j. hiszpański)<select data-mygroup>${[[0, "Nie wiem, pokazuj obie"], [1, "Grupa 1 (pierwszy przedmiot w planie)"], [2, "Grupa 2 (drugi przedmiot w planie)"]].map(([v, t]) => `<option value="${v}" ${groupOf(name) === v ? "selected" : ""}>${t}</option>`).join("")}</select></label>
       <div class="profile-row"><div class="avatar-pick" style="--c:${p.color || "#555"}">${avatarHtml({ name, color: p.color, avatar: p.avatar }, 88)}<input type="file" accept="image/*,.gif" hidden><button type="button" class="btn upload-btn">${icon("image", 16)}<span>Wgraj zdjęcie lub gif</span></button>${p.avatar ? `<button type="button" class="btn small remove-avatar">Usuń zdjęcie</button>` : ""}</div>
       <div class="profile-fields"><div class="swatches big">${PALETTE.map((c) => `<button data-mycolor="${c}" style="--c:${c}" class="${c === p.color ? "on" : ""}" title="Kolor"></button>`).join("")}</div>
       <label>Imię i nazwisko (na kartkówkach, klasa 8K)<input data-me="fullName" value="${esc(p.fullName || "")}"></label></div></div>
@@ -391,6 +393,7 @@ export function renderSettings(root) {
   main.addEventListener("change", async (e) => {
     const t = e.target;
     if (t.dataset.set === "font") settings.set("font", t.value);
+    else if (t.hasAttribute("data-mygroup")) users.set(name, Object.assign({}, myProfile(), { group: +t.value }));
     else if (t.dataset.hour != null) { const arr = hours().slice(); const v = t.value.trim(); arr[+t.dataset.hour] = /^\d{1,2}:\d{2}$/.test(v) ? v : DEFAULT_HOURS[+t.dataset.hour]; t.value = arr[+t.dataset.hour]; settings.set("hours", arr); }
     else if (t.dataset.me) { users.set(name, Object.assign({}, myProfile(), { [t.dataset.me]: t.value.trim() })); updatePresence(); }
     else if (t.type === "file") {

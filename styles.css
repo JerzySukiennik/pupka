@@ -246,6 +246,7 @@ main.plan { max-width: 1120px; }
 .plan-grid td a:hover { color: var(--accent); border-bottom-color: currentColor; }
 .plan-grid td span { color: var(--fg2); }
 .plan-grid td i { color: var(--fg3); font-style: normal; margin: 0 4px; }
+.plan-grid td .other { color: var(--fg3); opacity: .55; text-decoration: line-through; text-decoration-color: rgba(0,0,0,.18); }
 .plan-grid td.today { background: #fdf8f2; }
 .plan-grid td.now { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
 .settings section { padding: 26px 0; border-bottom: 1px solid var(--line); display: flex; flex-direction: column; gap: 14px; }
