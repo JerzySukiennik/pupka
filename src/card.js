@@ -203,6 +203,7 @@ export function openCard(root, id) {
     else if (a === "more") {
       const hidden = document.body.classList.contains("hide-cursors");
       popMenu(b, [
+        ["Drukuj (Cmd+P)", () => window.print()],
         [hidden ? "Pokaż kursory innych" : "Schowaj kursory innych", () => { document.body.classList.toggle("hide-cursors", !hidden); localStorage.setItem("pupka-cursors", hidden ? "1" : "0"); }],
         [pageEl.classList.contains("show-breaks") ? "Schowaj granice stron A4" : "Pokaż granice stron A4", () => pageEl.classList.toggle("show-breaks")],
         [draw.getState().grid ? "Wyłącz siatkę do rysowania" : "Włącz siatkę do rysowania", () => draw.toggleGrid()]
