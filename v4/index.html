@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Pupka</title>
+<meta name="description" content="Wspólny notatnik szkolny: tekst, rysowanie i AI, live dla trzech osób.">
+<meta name="theme-color" content="#f5f4ee">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23c96442'/%3E%3Crect x='14' y='12' width='36' height='40' rx='4' fill='%23fffefb'/%3E%3Cpath d='M20 24h24M20 32h24M20 40h14' stroke='%23c96442' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;0,6..72,700;1,6..72,400;1,6..72,600&family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Montserrat:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="lib/katex/katex.min.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app"></div>
+<script type="module">
+const FILES = ["src/main.js", "src/store.js", "src/home.js", "src/card.js", "src/net.js", "src/md.js", "src/ui.js", "src/icons.js", "src/extensions.js", "src/draw.js", "src/ai.js", "src/bubble.js", "src/slash.js", "src/gooey.js", "src/mind.js", "src/timetable.js", "src/morph.js", "lib/vendor.js", "styles.css"];
+import("./src/main.js").catch(async (e) => {
+  console.error(e);
+  const app = document.getElementById("app");
+  if (sessionStorage.getItem("pupka-boot-retry")) {
+    app.innerHTML = '<div style="padding:60px;text-align:center;color:#6f6c64;font:14px Geist,system-ui">Pupka nie wstała. Odśwież stronę (Cmd+Shift+R). Jeśli dalej nic, napisz Jurkowi.</div>';
+    return;
+  }
+  sessionStorage.setItem("pupka-boot-retry", "1");
+  app.innerHTML = '<div style="padding:60px;text-align:center;color:#6f6c64;font:14px Geist,system-ui">Odświeżam nową wersję…</div>';
+  await Promise.all(FILES.map((f) => fetch(f, { cache: "reload" }).catch(() => null)));
+  location.reload();
+});
+window.addEventListener("load", () => { setTimeout(() => { if (document.querySelector(".picker, .topbar, .cbar")) sessionStorage.removeItem("pupka-boot-retry"); }, 3000); });
+</script>
+</body>
+</html>
