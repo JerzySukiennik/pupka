@@ -41,7 +41,7 @@ export function openCard(root, id) {
       <header class="cbar">
         <a class="icon-btn back" href="#/s/${c.subject}${isTest ? "?tab=tests" : ""}" title="Wstecz">${icon("back")}</a>
         <div class="cb-crumb"><a href="#/s/${c.subject}${isTest ? "?tab=tests" : ""}">${esc(sub ? sub.name : "")}</a>${icon("chevronRight", 14)}<span class="card-title">${esc(c.title || (isTest ? c.name : "Nowa lekcja"))}</span></div>
-        <div class="cb-r"><div class="presence"></div><button class="icon-btn" data-ui="print" title="Drukuj (Cmd+P)">${icon("print")}</button><button class="icon-btn" data-ui="more" title="Więcej">${icon("more")}</button><button class="ai-chip" data-ui="ai" title="Czat AI (Cmd+J)">${icon("sparkle", 15)}<span>AI</span><kbd>⌘J</kbd></button></div>
+        <div class="cb-r"><div class="presence"></div><button class="icon-btn" data-ui="more" title="Więcej">${icon("more")}</button></div>
       </header>
       <div class="card-body">
         <nav class="rail">
