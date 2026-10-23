@@ -74,6 +74,7 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
       <div class="ai-msgs"></div>
       <div class="ai-attach"></div>
     </div>
+    <span class="isl-sheen" aria-hidden="true"></span>
     <span class="isl-ring" aria-hidden="true"></span>
     <form class="isl-bar">
       <span class="isl-mark">${icon("sparkle", 17)}</span>
@@ -92,9 +93,15 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
   let busy = false, liveEl = null, lastIdx = -1, attachments = [], pinned = false, hovering = false, unread = false, ctrl = null, stepText = "";
 
   function wantsOpen() { return pinned || hovering || document.activeElement === ta || ta.value.trim() || attachments.length || container.classList.contains("pointing-busy"); }
+  const fx = document.createElement("div");
+  fx.className = "isl-fx";
+  fx.innerHTML = `<span class="isl-dim"></span><span class="isl-waves"><i></i><i></i><i></i></span>`;
+  container.before(fx);
   function setOpen(v) {
     const was = container.classList.contains("open");
     container.classList.toggle("open", !!v);
+    fx.classList.toggle("open", !!v);
+    if (v && !was) { fx.classList.remove("go"); void fx.offsetWidth; fx.classList.add("go"); }
     document.body.classList.toggle("ai-open", !!v);
     if (v && !was) { unread = false; requestAnimationFrame(() => { msgs.scrollTop = msgs.scrollHeight; }); }
     if (v !== was) paintPeek();
@@ -344,7 +351,7 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
     },
     isOpen() { return container.classList.contains("open"); },
     focus() { ta.focus(); },
-    destroy() { chat.unobserve(render); stop(); document.removeEventListener("pointerdown", onDocDown, true); clearTimeout(closeTimer); }
+    destroy() { chat.unobserve(render); stop(); document.removeEventListener("pointerdown", onDocDown, true); clearTimeout(closeTimer); fx.remove(); }
   };
   return api;
 }

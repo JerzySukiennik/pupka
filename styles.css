@@ -520,13 +520,30 @@ body.hide-cursors .collaboration-cursor__selection { background: transparent !im
 .isl::before { content: ""; position: absolute; inset: 0; z-index: -1; border-radius: inherit; background: var(--paper); border-left: 1px solid var(--line2); border-top: 1px solid var(--line2); box-shadow: -16px -16px 48px -30px rgba(40,40,60,.3); opacity: 0; transition: opacity .3s .1s; }
 .isl::after { content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none; background: radial-gradient(circle at 100% 100%, rgba(255,255,255,.28) 0, rgba(255,255,255,.5) calc(var(--q) - 14px), rgba(255,255,255,.95) calc(var(--q) - 2px), rgba(40,40,60,.1) calc(var(--q) - .5px), transparent var(--q)), radial-gradient(circle at calc(100% - var(--q) * .55) calc(100% - var(--q) * .62), rgba(255,255,255,.55), transparent calc(var(--q) * .35)); transition: opacity .25s; }
 .isl:not(.open):hover { --q: 140px; }
-.isl.open { clip-path: circle(160% at 100% 100%); -webkit-backdrop-filter: none; backdrop-filter: none; transition: clip-path .62s var(--ease), --q .45s var(--ease); }
+.isl.open { clip-path: circle(160% at 100% 100%); -webkit-backdrop-filter: none; backdrop-filter: none; transition: clip-path .8s cubic-bezier(.22,1,.36,1) .08s, --q .45s var(--ease); }
+.isl-fx { position: fixed; inset: 0; z-index: 39; pointer-events: none; }
+.isl-dim { position: absolute; inset: 0; background: radial-gradient(circle at 100% 100%, rgba(42,39,36,.14), rgba(42,39,36,.03) 60%); opacity: 0; transition: opacity .5s; }
+.isl-fx.open .isl-dim { opacity: 1; }
+.isl-waves { position: absolute; right: 0; bottom: 0; }
+.isl-waves i { position: absolute; right: -360px; bottom: -360px; width: 720px; height: 720px; border-radius: 50%; border: 2px solid rgba(201,100,66,.45); opacity: 0; transform: scale(.15); }
+.isl-fx.go .isl-waves i { animation: islWave 1s cubic-bezier(.22,1,.36,1) both; }
+.isl-fx.go .isl-waves i:nth-child(2) { animation-delay: .12s; }
+.isl-fx.go .isl-waves i:nth-child(3) { animation-delay: .24s; }
+@keyframes islWave { 0% { opacity: .9; transform: scale(.15); } 100% { opacity: 0; transform: scale(1.6); } }
+.isl-sheen { position: absolute; right: 0; bottom: 0; width: 220px; height: 220px; pointer-events: none; background: linear-gradient(115deg, transparent 38%, rgba(255,255,255,.9) 50%, transparent 62%); transform: translateX(-70%); opacity: 0; }
+.isl:not(.open):hover .isl-sheen { opacity: 1; transform: translateX(45%); transition: transform .9s ease, opacity .2s; }
+@keyframes islRise { from { opacity: 0; transform: translateY(16px) scale(.985); } }
+@keyframes islBreathe { 50% { --q: 136px; } }
 .isl.open::before { opacity: 1; transition: opacity .18s; }
 .isl.open::after { opacity: 0; }
-.isl-ring { position: absolute; width: 40px; height: 40px; right: calc(var(--q) * .4 - 20px); bottom: calc(var(--q) * .4 - 20px); border-radius: 50%; border: 2.5px solid rgba(201,100,66,.18); border-top-color: var(--accent); opacity: 0; transform: scale(.6); pointer-events: none; transition: opacity .25s, transform .35s var(--ease); }
-.isl.busy:not(.open) .isl-ring { opacity: 1; transform: none; animation: spin .9s linear infinite; }
-.isl-body, .isl-bar { opacity: 0; transform: translateY(14px); visibility: hidden; transition: opacity .14s, transform .3s var(--ease), visibility 0s .14s; }
-.isl.open .isl-body, .isl.open .isl-bar { opacity: 1; transform: none; visibility: visible; transition: opacity .3s .16s, transform .55s .1s var(--ease), visibility 0s; }
+.isl-ring { position: absolute; width: 44px; height: 44px; right: calc(var(--q) * .4 - 22px); bottom: calc(var(--q) * .4 - 22px); border-radius: 50%; background: conic-gradient(from 0deg, transparent 0 25%, rgba(201,100,66,.15) 45%, var(--accent) 92%, #f2a78b 100%); -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px)); mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2.5px)); filter: drop-shadow(0 0 4px rgba(201,100,66,.45)); opacity: 0; transform: scale(.5); pointer-events: none; transition: opacity .25s, transform .4s cubic-bezier(.34,1.56,.64,1); }
+.isl.busy:not(.open) .isl-ring { opacity: 1; transform: none; animation: spin 1s linear infinite; }
+.isl.busy:not(.open):not(:hover) { animation: islBreathe 2.4s ease-in-out infinite; }
+.isl-body, .isl-bar { opacity: 0; visibility: hidden; transition: opacity .14s, visibility 0s .14s; }
+.isl.open .isl-body, .isl.open .isl-bar { opacity: 1; visibility: visible; transition: none; }
+.isl.open .isl-head { animation: islRise .55s cubic-bezier(.22,1,.36,1) .2s both; }
+.isl.open .ai-msgs { animation: islRise .6s cubic-bezier(.22,1,.36,1) .27s both; }
+.isl.open .isl-bar { animation: islRise .6s cubic-bezier(.22,1,.36,1) .34s both; }
 .isl-body { flex: 1; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
 .isl-head { display: flex; align-items: center; gap: 8px; padding: 12px 10px 4px 18px; color: var(--accent); }
 .isl-head b { color: var(--fg); font-weight: 600; }
@@ -630,6 +647,7 @@ body.hide-cursors .collaboration-cursor__selection { background: transparent !im
   .page { min-height: 70vh; border-radius: 6px; }
   .page-head { top: 8px; right: 14px; }
   .readonly-note { width: 100%; }
+  .isl-waves { bottom: calc(57px + env(safe-area-inset-bottom)); }
   .isl { --q: 100px; bottom: calc(57px + env(safe-area-inset-bottom)); width: 100vw; height: min(72vh, calc(100dvh - 130px)); border-radius: 22px 22px 0 0; }
   .isl:not(.open):hover { --q: 100px; }
 }
@@ -640,7 +658,7 @@ body.hide-cursors .collaboration-cursor__selection { background: transparent !im
 @media print {
   html, body { background: #fff; height: auto; }
   body { color: #000; }
-  .topbar, .cbar, .rail, .isl, .offline-pill, .sib, .readonly-note, .draw-layer, .page-breaks, .img-handle, .img-bar, .fmt-bubble, .fmt-menu, .slash, .goo, .math-pop, .toast, .collaboration-cursor__caret, .collaboration-cursor__label, .watermark { display: none !important; }
+  .topbar, .cbar, .rail, .isl, .isl-fx, .offline-pill, .sib, .readonly-note, .draw-layer, .page-breaks, .img-handle, .img-bar, .fmt-bubble, .fmt-menu, .slash, .goo, .math-pop, .toast, .collaboration-cursor__caret, .collaboration-cursor__label, .watermark { display: none !important; }
   .collaboration-cursor__selection { background: transparent !important; }
   .card-view { height: auto; display: block; }
   .card-body { display: block; }
