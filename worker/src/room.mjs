@@ -42,6 +42,7 @@ export class Room {
       try { Y.applyUpdate(this.doc, buf); } catch (e) { console.error("corrupt state", e); }
     }
     this.awareness = new awarenessProtocol.Awareness(this.doc);
+    clearInterval(this.awareness._checkInterval);
     this.awareness.setLocalState(null);
     this.doc.on("update", (update, origin) => {
       const enc = encoding.createEncoder();

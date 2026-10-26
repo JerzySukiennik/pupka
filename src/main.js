@@ -13,6 +13,7 @@ let currentKey = "";
 let picking = false;
 let routeToken = 0;
 let deferTimer = 0;
+let routeQueued = false;
 
 provider.once("sync", () => { setTimeout(purgeOld, 2000); });
 
@@ -76,7 +77,9 @@ onChange((kind) => {
   if (active && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName) && !active.closest(".search")) return;
   if (document.querySelector(".modal-bg, .pop-menu")) return;
   if (document.body.classList.contains("home-enter")) { clearTimeout(deferTimer); deferTimer = setTimeout(() => route(true), 1900); return; }
-  route(true);
+  if (routeQueued) return;
+  routeQueued = true;
+  queueMicrotask(() => { routeQueued = false; route(true); });
 });
 window.addEventListener("pupka:search", openSearch);
 window.addEventListener("pupka:switch", pick);

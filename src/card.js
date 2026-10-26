@@ -5,7 +5,7 @@ import { BlockId, MathNode, Callout, TestHeader, Spacer, ResizableImage, Shortcu
 import { createDraw, COLORS, SIZES } from "./draw.js";
 import { createAiIsland } from "./ai.js";
 import { uploadImage, importImageUrl } from "./net.js";
-import { card as getCard, subject, me, myProfile, profileOf, openCardDoc, closeCardDoc, updateCard, updatePresence, settings, fmtDateLong, listCards, createLesson, state, onChange, uid } from "./store.js";
+import { card as getCard, subject, me, myProfile, profileOf, openCardDoc, closeCardDoc, updateCard, updatePresence, settings, fmtDateLong, listCards, createLesson, state, onChange, uid, offlineLabel, offlineTitle } from "./store.js";
 import { docToPlain, esc } from "./md.js";
 import { presenceHtml } from "./ui.js";
 import { icon } from "./icons.js";
@@ -445,7 +445,7 @@ export function openCard(root, id) {
     const states = [];
     entry.provider.awareness.getStates().forEach((s, cid) => { if (cid !== entry.doc.clientID && s.user) states.push(s); });
     const aiBy = states.find((s) => s.ai) || (entry.provider.awareness.getLocalState() || {}).ai ? true : false;
-    presenceEl.innerHTML = presenceHtml(states.map((s) => s.user), 26) + (aiBy ? `<span class="ai-typing" title="AI pracuje">${icon("sparkle", 14)}</span>` : "") + (state.online ? "" : `<span class="offline-pill" title="Zmiany zapiszą się, gdy wróci sieć">${icon("offline", 14)}<span>offline</span></span>`);
+    presenceEl.innerHTML = presenceHtml(states.map((s) => s.user), 26) + (aiBy ? `<span class="ai-typing" title="AI pracuje">${icon("sparkle", 14)}</span>` : "") + (state.showOffline ? `<span class="offline-pill" title="${offlineTitle()}">${icon("offline", 14)}<span>${offlineLabel()}</span></span>` : "");
   }
   entry.provider.awareness.on("change", renderPresence);
   const offStatus = onChange((k) => { if (k === "status") renderPresence(); });

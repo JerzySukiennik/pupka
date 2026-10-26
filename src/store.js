@@ -20,7 +20,7 @@ export const users = index.getMap("users");
 export const settings = index.getMap("settings");
 export const plan = index.getMap("plan");
 
-export const state = { me: null, indexProvider: null, online: false, listeners: new Set() };
+export const state = { me: null, indexProvider: null, online: false, showOffline: false, paused: false, listeners: new Set() };
 
 export function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
 export function today() { const d = new Date(); return d.toISOString().slice(0, 10); }
@@ -60,17 +60,44 @@ export function connectIndex() {
     idb.whenSynced.then(() => (index.getMap("subjects").size ? null : new Promise((res) => { p.once("sync", res); setTimeout(res, 2500); }))),
     new Promise((res) => setTimeout(res, 4000))
   ]);
-  p.on("status", ({ status }) => { state.online = status === "connected"; emit("status"); });
+  p.on("status", ({ status }) => setConnected(status === "connected"));
   state.indexProvider = p;
   index.on("update", () => emit("index"));
   return p;
 }
 
+let offTimer = 0;
+function setConnected(v) {
+  const was = state.online;
+  state.online = v;
+  if (v) { clearTimeout(offTimer); offTimer = 0; if (!was || state.showOffline) { state.showOffline = false; emit("status"); } return; }
+  if (was) emit("status");
+  if (offTimer || state.showOffline) return;
+  offTimer = setTimeout(() => { offTimer = 0; if (!state.online && !state.paused) { state.showOffline = true; emit("status"); } }, 5000);
+}
+export function offlineLabel() { return navigator.onLine === false ? "offline" : "bez synchronizacji"; }
+export function offlineTitle() { return navigator.onLine === false ? "Nie ma internetu. Zmiany zapisują się na tym urządzeniu i wyślą się same, gdy wróci sieć." : "Serwer Pupki chwilowo nie odpowiada. Zmiany zapisują się na tym urządzeniu i wyślą się same, gdy wróci połączenie."; }
+window.addEventListener("offline", () => { state.showOffline = true; emit("status"); });
+let pauseTimer = 0;
+const liveProviders = () => [state.indexProvider].concat(Array.from(docCache.values()).map((e) => e.provider)).filter(Boolean);
+document.addEventListener("visibilitychange", () => {
+  clearTimeout(pauseTimer);
+  if (document.hidden) pauseTimer = setTimeout(() => { state.paused = true; liveProviders().forEach((p) => p.disconnect()); }, 45000);
+  else if (state.paused) { state.paused = false; liveProviders().forEach((p) => p.connect()); setConnected(state.online); }
+});
+
 export function onChange(fn) { state.listeners.add(fn); return () => state.listeners.delete(fn); }
 let emitTimer = null;
+let pendingKinds = new Set();
 function emit(kind) {
+  pendingKinds.add(kind);
   if (emitTimer) return;
-  emitTimer = setTimeout(() => { emitTimer = null; state.listeners.forEach((fn) => { try { fn(kind); } catch (e) { console.error(e); } }); }, 30);
+  emitTimer = setTimeout(() => {
+    emitTimer = null;
+    const kinds = Array.from(pendingKinds);
+    pendingKinds = new Set();
+    for (const k of kinds) state.listeners.forEach((fn) => { try { fn(k); } catch (e) { console.error(e); } });
+  }, 30);
 }
 
 export function setMe(name) {

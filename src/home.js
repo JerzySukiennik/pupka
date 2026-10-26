@@ -1,6 +1,6 @@
 /* Screens outside the editor: person picker, home, subject, plan, trash, settings, search. */
 
-import { NAMES, PALETTE, FONTS, DAYS, DEFAULT_HOURS, users, settings, plan, listSubjects, rankedSubjects, listCards, allCards, subject, card, createSubject, updateSubject, reorderSubjects, createLesson, createTest, updateCard, trashCard, trashSubject, restoreCard, restoreSubject, trashItems, presence, setMe, me, myProfile, nowLesson, hours, today, fmtDate, fmtDateLong, updatePresence, state, onChange } from "./store.js";
+import { NAMES, PALETTE, FONTS, DAYS, DEFAULT_HOURS, users, settings, plan, listSubjects, rankedSubjects, listCards, allCards, subject, card, createSubject, updateSubject, reorderSubjects, createLesson, createTest, updateCard, trashCard, trashSubject, restoreCard, restoreSubject, trashItems, presence, setMe, me, myProfile, nowLesson, hours, today, fmtDate, fmtDateLong, updatePresence, state, onChange, offlineLabel, offlineTitle } from "./store.js";
 import { uploadImage, dataUrlToBlob } from "./net.js";
 import { topbar, avatarHtml, presenceHtml } from "./ui.js";
 import { icon } from "./icons.js";
@@ -52,7 +52,7 @@ export function renderPicker(root, onPicked) {
       if (meta) meta.innerHTML = p.color ? `Wejdź${icon("chevronRight", 14)}` : "Pierwszy raz: kolor i zdjęcie";
     });
     const txt = el.querySelector(".pk-net");
-    if (txt) { txt.textContent = state.online ? "" : "offline, wszystko zapisze się po powrocie sieci ·"; txt.hidden = !!state.online; }
+    if (txt) { txt.textContent = state.showOffline ? offlineLabel() + ", zmiany zapisują się na tym urządzeniu ·" : ""; txt.hidden = !state.showOffline; }
   }
   draw();
   const obs = () => { if (!el.classList.contains("setup-mode")) patch(); };
@@ -170,7 +170,7 @@ export function renderPicker(root, onPicked) {
 function homeRight() {
   const p = myProfile();
   const online = presence().map((s) => s.user);
-  return `<button class="search-pill" data-go="#/search" title="Szukaj we wszystkich notatkach (Cmd+K)">${icon("search", 15)}<span>Szukaj</span><kbd>⌘K</kbd></button>${presenceHtml(online, 26)}${state.online ? "" : `<span class="offline-pill" title="Zmiany zapiszą się, gdy wróci sieć">${icon("offline", 14)}<span>offline</span></span>`}<button class="icon-btn" data-go="#/settings" title="Ustawienia">${icon("settings2")}</button><button class="me-btn" data-go="#/switch" title="Zmień osobę">${avatarHtml({ name: me(), color: p.color, avatar: p.avatar }, 30)}</button>`;
+  return `<button class="search-pill" data-go="#/search" title="Szukaj we wszystkich notatkach (Cmd+K)">${icon("search", 15)}<span>Szukaj</span><kbd>⌘K</kbd></button>${presenceHtml(online, 26)}${state.showOffline ? `<span class="offline-pill" title="${offlineTitle()}">${icon("offline", 14)}<span>${offlineLabel()}</span></span>` : ""}<button class="icon-btn" data-go="#/settings" title="Ustawienia">${icon("settings2")}</button><button class="me-btn" data-go="#/switch" title="Zmień osobę">${avatarHtml({ name: me(), color: p.color, avatar: p.avatar }, 30)}</button>`;
 }
 function navHtml(on) {
   return [["#/", "Dziś", "home"], ["#/plan", "Plan lekcji", "plan"], ["#/trash", "Kosz", "trash"]].map(([h, t, k]) => `<a href="${h}" class="${k === on ? "on" : ""}">${t}</a>`).join("");
