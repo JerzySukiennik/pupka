@@ -202,6 +202,7 @@ export async function chat(req, env, origin, sse) {
     p.drawings ? `RYSUNKI ODRĘCZNE NA KARCIE: ${String(p.drawings).slice(0, 600)}` : "RYSUNKI ODRĘCZNE NA KARCIE: brak",
     Array.isArray(p.images) && p.images.length ? `OBRAZKI NA KARCIE (można je obejrzeć view_image i rysować/kolorować na nich): ${p.images.slice(0, 20).map((i) => "[" + (i.block | 0) + "]" + (i.alt ? " " + String(i.alt).slice(0, 60) : "")).join(", ")}` : "",
     p.imageDrawings ? `RYSUNKI NA OBRAZKACH (skala 0-1000):\n${String(p.imageDrawings).slice(0, 4000)}` : "",
+    Array.isArray(p.drawingsList) && p.drawingsList.length ? `RYSUNKI ODRĘCZNE NA KARCIE (obejrzysz je przez view_drawing, pokolorujesz obszary przez fill_on_drawing): ${p.drawingsList.slice(0, 12).map((d) => "[R" + (d.n | 0) + "] " + String(d.desc || "").slice(0, 120)).join("; ")}` : "",
     p.cards ? `INNE KARTY (id | przedmiot | data | temat):\n${String(p.cards).slice(0, 12000)}` : "",
     p.chatNote || ""
   ].filter(Boolean).join("\n\n");
@@ -272,6 +273,24 @@ export async function chat(req, env, origin, sse) {
               { type: "image", source: Object.assign({ type: "base64" }, img) }
             ] : "Nie udało się pobrać tego obrazka.";
           }
+        } else if (t.name === "view_drawing") {
+          const n = t.input.drawing | 0;
+          const dr = (Array.isArray(p.drawingsList) ? p.drawingsList : []).find((d) => (d.n | 0) === n);
+          if (!dr) result = "Nie ma rysunku R" + n + ". Rysunki: " + (p.drawingsList || []).map((d) => "R" + d.n).join(", ");
+          else if (!dr.grid_url) result = "Podglądu rysunku R" + n + " nie udało się przygotować. Opis: " + String(dr.desc || "");
+          else {
+            sse({ t: "status", text: "oglądam rysunek" });
+            const img = await imageBytes(env, dr.grid_url);
+            result = img ? [
+              { type: "text", text: "Rysunek R" + n + " z siatką: liczby na brzegach to współrzędne 0-1000 (x w prawo, y w dół) tego kadru. Białe tło to pusta kartka. Tych współrzędnych używaj w fill_on_drawing. Twoje zmiany z tej odpowiedzi nie są na podglądzie widoczne, ale zostały wykonane." },
+              { type: "image", source: Object.assign({ type: "base64" }, img) }
+            ] : "Nie udało się pobrać podglądu rysunku.";
+          }
+        } else if (t.name === "fill_on_drawing") {
+          const fills = Array.isArray(t.input.fills) ? t.input.fills.slice(0, 24) : [];
+          sse({ t: "drawing_fill", drawing: t.input.drawing | 0, fills });
+          edited = true;
+          result = fills.length ? `Wypełniam ${fills.length} obszarów na rysunku R${t.input.drawing | 0} (dokładnie do kresek).` : "Brak obszarów.";
         } else if (t.name === "draw_on_image") {
           const shapes = Array.isArray(t.input.shapes) ? t.input.shapes.slice(0, 200) : [];
           sse({ t: "image_draw", block: t.input.block | 0, shapes });

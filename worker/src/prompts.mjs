@@ -22,6 +22,8 @@ Obrazki: gdy proszą o obrazek, ilustrację, mapę, schemat, logo lub portret do
 
 Rysunki odręczne (kreski, kształty, napisy, wypełnienia) nie są tekstem. W kontekście dostajesz ich liczbę, a dla obrazków listę rysunków na każdym obrazku (rodzaj, kolor, położenie w skali 0-1000). Możesz je usuwać narzędziem delete_drawings (wszystkie, jednej osoby, tylko swoje z author „AI”, albo tylko z jednego obrazka przez on_image). Gdy ktoś prosi o usunięcie rysunków, od razu użyj narzędzia i potwierdź jednym zdaniem.
 
+Kolorowanie odręcznych rysunków (kreski narysowane piórem na karcie, lista RYSUNKI ODRĘCZNE): możesz i powinieneś to robić, nigdy nie mów, że nie da się kolorować kresek. Najpierw obejrzyj rysunek przez view_drawing, znajdź zamknięty obszar (np. trójkąt dachu, prostokąt okna) i wypełnij go przez fill_on_drawing punktem w jego środku. Jeśli obszar okaże się niezamknięty, powiedz, której kreski brakuje.
+
 Rysowanie i kolorowanie NA obrazku (mapy, schematy, zdjęcia na karcie): możesz i powinieneś to robić. Nigdy nie mów, że nie możesz rysować na obrazku ani zmienić kolorowania. Najpierw obejrzyj obrazek narzędziem view_image (dostaniesz go razem z siatką współrzędnych: x od 0 na lewej krawędzi do 1000 na prawej, y od 0 u góry do 1000 na dole). Potem:
 - draw_on_image: strzałki, obwódki, podpisy, linie i kształty w tych współrzędnych; rysunki są przypięte do obrazka i przesuwają się razem z nim.
 - fill_on_image: kolorowanie obszaru dokładnie do linii (jak wiaderko z farbą). Dla każdego obszaru podaj jeden punkt w jego środku, z dala od linii, oraz kolor. Gdy obszar ma być ograniczony konkretnymi liniami (np. przerywaną czerwoną granicą zlodowacenia i czarną granicą państwa), podaj ich kolory w walls, wtedy inne linie w środku (rzeki, siatka) nie przerywają wypełnienia; dla linii przerywanych ustaw gap 4-6. Bez walls obszar kończy się na każdej wyraźnie innej linii lub kolorze.
@@ -92,6 +94,23 @@ export const TOOLS = [
         fills: { type: "array", items: { type: "object", properties: { x: { type: "number" }, y: { type: "number" }, color: { type: "string" }, walls: { type: "array", items: { type: "string" } }, gap: { type: "number" }, opacity: { type: "number" } }, required: ["x", "y", "color"] } }
       },
       required: ["block", "fills"]
+    }
+  },
+  {
+    name: "view_drawing",
+    description: "Pokazuje odręczny rysunek z karty (kreski, kształty, wypełnienia) jako obraz z siatką współrzędnych 0-1000. Użyj przed fill_on_drawing, żeby zobaczyć, gdzie są zamknięte obszary.",
+    input_schema: { type: "object", properties: { drawing: { type: "integer", description: "numer rysunku R z listy RYSUNKI ODRĘCZNE" } }, required: ["drawing"] }
+  },
+  {
+    name: "fill_on_drawing",
+    description: "Koloruje zamknięte obszary na odręcznym rysunku dokładnie do kresek (wiaderko z farbą), np. dach, ściany, okna. Każde wypełnienie: punkt (x, y w skali 0-1000 z siatki view_drawing) w środku obszaru, z dala od kresek, kolor #rrggbb, opcjonalnie opacity (0.2-1, domyślnie 0.8) i gap (domykanie małych przerw między kreskami, px 0-12, domyślnie 4). Obszar, który nie jest zamknięty kreskami, zostanie pominięty.",
+    input_schema: {
+      type: "object",
+      properties: {
+        drawing: { type: "integer", description: "numer rysunku R" },
+        fills: { type: "array", items: { type: "object", properties: { x: { type: "number" }, y: { type: "number" }, color: { type: "string" }, gap: { type: "number" }, opacity: { type: "number" } }, required: ["x", "y", "color"] } }
+      },
+      required: ["drawing", "fills"]
     }
   },
   {

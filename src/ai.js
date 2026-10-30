@@ -60,7 +60,7 @@ export function applyDrawing(editor, draw, bids, ev) {
 
 const STEP = {
   read_card: "Czytam inną kartę", search_images: "Szukam obrazka", find_text: "Szukam tekstu", view_image: "Oglądam obrazek",
-  draw_on_image: "Rysuję na obrazku", fill_on_image: "Koloruję obszary", draw_on_card: "Rysuję na kartce", delete_drawings: "Usuwam rysunki", edit_card: "Piszę zmiany w karcie", make_mind_map: "Robię mapę myśli"
+  draw_on_image: "Rysuję na obrazku", fill_on_image: "Koloruję obszary", draw_on_card: "Rysuję na kartce", delete_drawings: "Usuwam rysunki", edit_card: "Piszę zmiany w karcie", make_mind_map: "Robię mapę myśli", view_drawing: "Oglądam rysunek", fill_on_drawing: "Koloruję rysunek"
 };
 const SUGGEST = [["spell", "Popraw błędy", "Popraw na tej karcie tylko błędy formalne (wielkie litery, kropki, przecinki, literówki, ortografię). Nie zmieniaj treści; jeśli coś wygląda na błąd merytoryczny, tylko mi to wypisz."], ["wand", "Wyjaśnij prościej", "Wyjaśnij mi ten temat prościej, w kilku zdaniach."], ["layers", "Pytania powtórkowe", "Zrób 5 krótkich pytań powtórkowych z tej karty, z odpowiedziami na końcu."], ["image", "Obrazek do tematu", "Znajdź dobry obrazek do tego tematu i wstaw go w odpowiednie miejsce."]];
 const HOVER = matchMedia("(hover: hover)").matches;
@@ -282,6 +282,19 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
       step("Przygotowuję obrazki");
       imgsForAI = await gridded(imgsForAI.slice(0, 4)).then((g) => g.concat(imgsForAI.slice(4)));
     }
+    const blockOf = (bid) => { const i = bids.indexOf(bid); return i >= 0 ? i + 1 : 0; };
+    let drawingsList = draw ? draw.drawings(blockOf) : [];
+    if (drawingsList.length && imageTalk) {
+      step("Przygotowuję rysunki");
+      for (const d of drawingsList.slice(0, 4)) {
+        try {
+          const key = "drawing|" + d.n + "|" + d.sig;
+          if (!gridCache.has(key)) { const blob = await draw.drawingSnapshot(d.n); if (blob) gridCache.set(key, await uploadImage(new File([blob], "rysunek.jpg", { type: "image/jpeg" }), me(), 1600)); }
+          if (gridCache.has(key)) d.grid_url = gridCache.get(key);
+        } catch (e) { /* preview optional */ }
+      }
+    }
+    drawingsList = drawingsList.map(({ n, desc, grid_url }) => ({ n, desc, grid_url }));
     step("Czytam kartę");
     if (entry.provider) entry.provider.awareness.setLocalStateField("ai", { by: name });
     let stopped = false;
@@ -292,7 +305,8 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
         attachments: sent,
         visual: imageTalk || sent.length > 0,
         images: imgsForAI,
-        imageDrawings: draw ? draw.imageSummary((bid) => { const i = bids.indexOf(bid); return i >= 0 ? i + 1 : 0; }) : ""
+        imageDrawings: draw ? draw.imageSummary(blockOf) : "",
+        drawingsList
       }, (ev) => {
         if (ctrl.signal.aborted) return;
         if (ev.t === "delta") { if (current && !acc) settle(); acc += ev.text; textEl.innerHTML = mdToHtml(acc); msgs.scrollTop = msgs.scrollHeight; }
@@ -300,6 +314,10 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
         else if (ev.t === "status") { const t = ev.text.charAt(0).toUpperCase() + ev.text.slice(1); current = t; paintSteps(); }
         else if (ev.t === "images") { images.push(...(ev.items || [])); }
         else if (ev.t === "draw") { if (!editor.isEditable || !draw) { acc += "\n(Nie mogę rysować na tej karcie.)"; return; } const n = applyDrawing(editor, draw, bids, ev); if (n) edited = true; else acc += "\n(Rysunek nie wyszedł, spróbuj jeszcze raz.)"; }
+        else if (ev.t === "drawing_fill") {
+          if (!editor.isEditable || !draw) { acc += "\n(Nie mogę kolorować na tej karcie.)"; return; }
+          pendingWork.push(draw.fillDrawing(ev.drawing, ev.fills, "AI").then((r) => { if (r.count) edited = true; if (r.notes && r.notes.length) acc += "\n(" + r.notes.join("; ") + ")"; }).catch((err) => { acc += "\n(" + err.message + ")"; }));
+        }
         else if (ev.t === "image_draw" || ev.t === "image_fill") {
           if (!editor.isEditable || !draw) { acc += "\n(Nie mogę rysować na tej karcie.)"; return; }
           const bid = bids[(ev.block | 0) - 1];

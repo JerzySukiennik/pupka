@@ -202,7 +202,7 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     for (const id of Array.from(els.keys())) if (!strokes.has(id)) { els.get(id).g.remove(); els.delete(id); }
     strokes.forEach((s, id) => {
       const e = els.get(id);
-      if (!e || e.s !== s) { if (e) e.g.remove(); const g = build(id, s); svgStatic.appendChild(g); els.set(id, { g, s }); }
+      if (!e || e.s !== s) { if (e) e.g.remove(); const g = build(id, s); if (s.t === "area") svgStatic.insertBefore(g, svgStatic.firstChild); else svgStatic.appendChild(g); els.set(id, { g, s }); }
       place(id);
     });
     drawSelection();
@@ -288,16 +288,113 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
     if (recs.length) tx(() => recs.forEach((r) => strokes.set(uid(), r)));
     return { count: recs.length, notes };
   }
+  function clusters() {
+    layout();
+    const items = [];
+    strokes.forEach((s, id) => {
+      if (s.a || s.t === "mind") return;
+      const pts = absPts(s);
+      if (!pts.length) return;
+      const pad = s.t === "hl" ? (s.w || 4) * 2 : (s.w || 4);
+      const bb = s.t === "label" ? { x0: pts[0][0], y0: pts[0][1] - (s.w || 16), x1: pts[0][0] + String(s.txt || "").length * (s.w || 16) * 0.6, y1: pts[0][1] + 4 } : bbox(pts);
+      items.push({ id, s, bb: { x0: bb.x0 - pad, y0: bb.y0 - pad, x1: bb.x1 + pad, y1: bb.y1 + pad } });
+    });
+    const parent = items.map((_, i) => i);
+    const find = (i) => (parent[i] === i ? i : (parent[i] = find(parent[i])));
+    const M = 24;
+    for (let i = 0; i < items.length; i++) for (let j = i + 1; j < items.length; j++) {
+      const a = items[i].bb, b = items[j].bb;
+      if (a.x0 - M <= b.x1 && b.x0 - M <= a.x1 && a.y0 - M <= b.y1 && b.y0 - M <= a.y1) parent[find(i)] = find(j);
+    }
+    const groups = new Map();
+    items.forEach((it, i) => {
+      const k = find(i);
+      if (!groups.has(k)) groups.set(k, { ids: [], bb: Object.assign({}, it.bb), by: new Set(), top: it });
+      const g = groups.get(k);
+      g.ids.push(it.id); g.by.add(it.s.by || "?");
+      g.bb.x0 = Math.min(g.bb.x0, it.bb.x0); g.bb.y0 = Math.min(g.bb.y0, it.bb.y0); g.bb.x1 = Math.max(g.bb.x1, it.bb.x1); g.bb.y1 = Math.max(g.bb.y1, it.bb.y1);
+      if (it.bb.y0 < g.top.bb.y0) g.top = it;
+    });
+    return Array.from(groups.values()).filter((g) => g.ids.length >= 2 || (g.bb.x1 - g.bb.x0) * (g.bb.y1 - g.bb.y0) > 3600).sort((a, b) => a.bb.y0 - b.bb.y0 || a.bb.x0 - b.bb.x0).map((g, i) => Object.assign(g, { n: i + 1 }));
+  }
+  async function rasterCluster(c) {
+    const P = 18;
+    const x0 = c.bb.x0 - P, y0 = c.bb.y0 - P, w = c.bb.x1 - c.bb.x0 + 2 * P, h = c.bb.y1 - c.bb.y0 + 2 * P;
+    const k = Math.min(2, 900 / Math.max(w, h));
+    const W = Math.max(1, Math.round(w * k)), H = Math.max(1, Math.round(h * k));
+    const sv = svg("svg", { xmlns: NS, width: W, height: H, viewBox: x0 + " " + y0 + " " + w + " " + h });
+    for (const id of c.ids) {
+      const s = strokes.get(id), f = s && frame(s);
+      if (!f) continue;
+      const g = build(id, s);
+      g.setAttribute("transform", "translate(" + f.ox + "," + f.oy + ")" + (f.k !== 1 ? " scale(" + f.k + ")" : ""));
+      sv.appendChild(g);
+    }
+    const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+    const g = cv.getContext("2d", { willReadFrequently: true });
+    g.fillStyle = "#fff"; g.fillRect(0, 0, W, H);
+    const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(sv)], { type: "image/svg+xml" }));
+    await new Promise((res) => { const i = new Image(); i.onload = () => { g.drawImage(i, 0, 0, W, H); res(); }; i.onerror = res; i.src = url; });
+    URL.revokeObjectURL(url);
+    return { cv, g, W, H, x0, y0, k };
+  }
+  async function fillCluster(c, fills, author, defOpacity) {
+    const r = await rasterCluster(c);
+    const px = { w: r.W, h: r.H, data: r.g.getImageData(0, 0, r.W, r.H).data };
+    const recs = [], notes = [];
+    for (const f of (Array.isArray(fills) ? fills : []).slice(0, 24)) {
+      const sx = (+f.x / 1000) * r.W, sy = (+f.y / 1000) * r.H;
+      if (!Number.isFinite(sx) || !Number.isFinite(sy)) continue;
+      const gap = Number.isFinite(+f.gap) && f.gap !== null ? +f.gap : 4;
+      const res = floodRegion(px, sx, sy, { gap: Math.round(gap * r.k), tolerance: 70, clipOutside: false });
+      const where = "(" + Math.round(f.x) + ", " + Math.round(f.y) + ")";
+      if (!res.mask) { notes.push("punkt " + where + " leży na kresce"); continue; }
+      let open = false;
+      for (let x = 0; x < r.W && !open; x++) if (res.mask[x] || res.mask[(r.H - 1) * r.W + x]) open = true;
+      for (let y = 0; y < r.H && !open; y++) if (res.mask[y * r.W] || res.mask[y * r.W + r.W - 1]) open = true;
+      if (open) { notes.push("obszar przy " + where + " nie jest zamknięty kreskami"); continue; }
+      const rings = maskToRings(res.mask, r.W, r.H, 1.1);
+      if (!rings.length) continue;
+      const abs = [], lens = [];
+      for (const ring of rings) { lens.push(ring.length); for (const q of ring) abs.push([r.x0 + q[0] / r.k, r.y0 + q[1] / r.k]); }
+      const color = /^#[0-9a-fA-F]{6}$/.test(String(f.color || "")) ? f.color : st.color;
+      const op = Number.isFinite(+f.opacity) && f.opacity !== null ? Math.max(0.15, Math.min(1, +f.opacity)) : defOpacity;
+      recs.push(Object.assign(record(abs, { t: "area", r: lens, f: color, c: color, o: op, w: 1 }), { by: author || name, ts: Date.now() }));
+    }
+    if (recs.length) tx(() => recs.forEach((rec) => strokes.set(uid(), rec)));
+    return { count: recs.length, notes };
+  }
+  async function fillDrawing(n, fills, author) {
+    const c = clusters()[(n | 0) - 1];
+    if (!c) throw new Error("Nie ma rysunku R" + n + " na tej karcie.");
+    return fillCluster(c, fills, author, 0.8);
+  }
+  function paintGrid(g, W, H) {
+    g.lineWidth = 1; g.font = "bold 11px sans-serif"; g.textBaseline = "top";
+    for (let v = 100; v < 1000; v += 100) {
+      const x = Math.round(v / 1000 * W) + 0.5, y = Math.round(v / 1000 * H) + 0.5;
+      g.strokeStyle = v === 500 ? "rgba(0,0,0,.45)" : "rgba(0,0,0,.22)";
+      g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.moveTo(0, y); g.lineTo(W, y); g.stroke();
+      for (const [tx, ty] of [[x + 2, 2], [2, y + 2]]) { g.fillStyle = "rgba(255,255,255,.85)"; g.fillRect(tx - 1, ty - 1, 24, 13); g.fillStyle = "#000"; g.fillText(String(v), tx, ty); }
+    }
+  }
   let filling = false;
   async function fillAtPoint(p) {
     if (filling) return;
     const hitImg = imageAt(p);
     const hint = (t) => onChange && onChange(Object.assign(api.getState(), { hint: t }));
-    if (!hitImg) { hint("Wiadro działa na obrazkach (np. mapach). Kliknij w obszar na obrazku."); return; }
+    const c = hitImg ? null : clusters().find((g) => p[0] >= g.bb.x0 && p[0] <= g.bb.x1 && p[1] >= g.bb.y0 && p[1] <= g.bb.y1);
+    if (!hitImg && !c) { hint("Kliknij wiadrem w zamknięty obszar rysunku albo obrazka."); return; }
     filling = true; layer.classList.add("busy");
     try {
-      const r = hitImg.r;
-      const res = await fillImage(hitImg.bid, [{ x: (p[0] - r.left) / r.w * 1000, y: (p[1] - r.top) / r.h * 1000, color: st.color }], name);
+      let res;
+      if (hitImg) {
+        const r = hitImg.r;
+        res = await fillImage(hitImg.bid, [{ x: (p[0] - r.left) / r.w * 1000, y: (p[1] - r.top) / r.h * 1000, color: st.color }], name);
+      } else {
+        const P = 18, x0 = c.bb.x0 - P, y0 = c.bb.y0 - P, w = c.bb.x1 - c.bb.x0 + 2 * P, h = c.bb.y1 - c.bb.y0 + 2 * P;
+        res = await fillCluster(c, [{ x: (p[0] - x0) / w * 1000, y: (p[1] - y0) / h * 1000, color: st.color }], name, 0.8);
+      }
       if (!res.count) hint(res.notes[0] ? "Nie wypełniłem: " + res.notes[0] + "." : "Nie znalazłem obszaru do wypełnienia.");
     } catch (e) { hint(e.message); }
     finally { filling = false; layer.classList.remove("busy"); }
@@ -697,14 +794,24 @@ export function createDraw({ pageEl, pmEl, ydoc, provider, name, color, canEdit,
         await new Promise((res) => { const i = new Image(); i.onload = () => { g.drawImage(i, 0, 0, W, H); res(); }; i.onerror = res; i.src = url; });
         URL.revokeObjectURL(url);
       }
-      g.lineWidth = 1; g.font = "bold 11px sans-serif"; g.textBaseline = "top";
-      for (let v = 100; v < 1000; v += 100) {
-        const x = Math.round(v / 1000 * W) + 0.5, y = Math.round(v / 1000 * H) + 0.5;
-        g.strokeStyle = v === 500 ? "rgba(0,0,0,.45)" : "rgba(0,0,0,.22)";
-        g.beginPath(); g.moveTo(x, 0); g.lineTo(x, H); g.moveTo(0, y); g.lineTo(W, y); g.stroke();
-        for (const [tx, ty] of [[x + 2, 2], [2, y + 2]]) { g.fillStyle = "rgba(255,255,255,.85)"; g.fillRect(tx - 1, ty - 1, 24, 13); g.fillStyle = "#000"; g.fillText(String(v), tx, ty); }
-      }
+      paintGrid(g, W, H);
       return await new Promise((r) => c.toBlob(r, "image/jpeg", 0.86));
+    },
+    fillDrawing,
+    drawings(blockOf) {
+      return clusters().map((c) => {
+        const kinds = {};
+        for (const id of c.ids) { const s = strokes.get(id); const k = s.t === "area" ? "wypełnień" : s.t === "label" ? "napisów" : "kresek"; kinds[k] = (kinds[k] || 0) + 1; }
+        const n = c.top.s.bid ? blockOf(c.top.s.bid) : 0;
+        return { n: c.n, sig: c.ids.length + ":" + Math.round(c.bb.x1 - c.bb.x0) + "x" + Math.round(c.bb.y1 - c.bb.y0) + ":" + c.ids.map((id) => strokes.get(id).ts || 0).reduce((a, b) => Math.max(a, b), 0), desc: Object.entries(kinds).map(([k, v]) => v + " " + k).join(", ") + " (autor: " + Array.from(c.by).join(", ") + ")" + (n ? ", przy bloku [" + n + "]" : "") + ", około " + Math.round(c.bb.x1 - c.bb.x0) + "×" + Math.round(c.bb.y1 - c.bb.y0) + " px" };
+      });
+    },
+    async drawingSnapshot(n) {
+      const c = clusters()[(n | 0) - 1];
+      if (!c) return null;
+      const r = await rasterCluster(c);
+      paintGrid(r.g, r.W, r.H);
+      return await new Promise((res) => r.cv.toBlob(res, "image/jpeg", 0.86));
     },
     addImageShapes(bid, shapes, author) {
       layout();
