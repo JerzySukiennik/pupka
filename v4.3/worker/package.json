@@ -1,0 +1,10 @@
+{
+  "name": "pupka-api",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "lib0": "^0.2.99",
+    "y-protocols": "^1.0.6",
+    "yjs": "^13.6.33"
+  }
+}
