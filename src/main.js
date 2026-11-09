@@ -4,6 +4,7 @@ import { connectIndex, resetLocalIfNeeded, onChange, me, setMe, purgeOld, NAMES,
 import { renderPicker, renderHome, renderSubject, renderPlan, renderTrash, renderSettings, openSearch } from "./home.js";
 import { openCard } from "./card.js";
 import { from, transition } from "./morph.js";
+import { installConnector } from "./apogee.js";
 
 const root = document.getElementById("app");
 await resetLocalIfNeeded();
@@ -60,6 +61,15 @@ function pick() {
   currentKey = "";
   renderPicker(root, () => { picking = false; route(true); });
 }
+
+installConnector({
+  enter(name) {
+    setMe(name);
+    picking = false;
+    if (!parse().parts.length) location.hash = "#/";
+    route(true);
+  }
+});
 
 window.addEventListener("hashchange", () => {
   if (!me() || picking) return;
