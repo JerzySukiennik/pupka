@@ -3,8 +3,9 @@
 import { icon } from "./icons.js";
 import { FONTS, settings } from "./store.js";
 import { rewriteSelection } from "./ai.js";
+import { BOARD_ICON } from "./boardview.js";
 
-export function createBubble({ editor, isDrawing, onExplain, toast }) {
+export function createBubble({ editor, isDrawing, onExplain, onBoard, toast }) {
   const el = document.createElement("div");
   el.className = "fmt-bubble";
   document.body.appendChild(el);
@@ -118,9 +119,10 @@ export function createBubble({ editor, isDrawing, onExplain, toast }) {
       return;
     }
     if (b.dataset.m === "ai") {
-      openMenu(b, [["fix", `${icon("spell", 15)}<span>Popraw błędy</span>`], ["explain", `${icon("wand", 15)}<span>Wyjaśnij w czacie</span>`], ["expand", `${icon("plus", 15)}<span>Rozwiń</span>`], ["shorten", `${icon("minus", 15)}<span>Skróć</span>`]], async (k) => {
+      openMenu(b, [["fix", `${icon("spell", 15)}<span>Popraw błędy</span>`], ["explain", `${icon("wand", 15)}<span>Wyjaśnij w czacie</span>`], ["board", `${BOARD_ICON}<span>Wyjaśnij na tablicy</span>`], ["expand", `${icon("plus", 15)}<span>Rozwiń</span>`], ["shorten", `${icon("minus", 15)}<span>Skróć</span>`]], async (k) => {
         const { from, to } = editor.state.selection;
         if (k === "explain") { hide(); onExplain(editor.state.doc.textBetween(from, to, "\n")); return; }
+        if (k === "board") { hide(); onBoard(editor.state.doc.textBetween(from, to, "\n")); return; }
         busy = true; el.classList.add("busy");
         try { await rewriteSelection(editor, k); } catch (err) { toast("AI: " + err.message, 5000); }
         busy = false; el.classList.remove("busy"); hide();

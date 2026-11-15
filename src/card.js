@@ -15,6 +15,7 @@ import { createBubble } from "./bubble.js";
 import { createSlash } from "./slash.js";
 import { gooey, closeGooey } from "./gooey.js";
 import { openMindEditor, mindMarkup, cleanTree } from "./mind.js";
+import { openBoard, takeBoardInsert } from "./boardview.js";
 
 const PAGE_CONTENT_H = 971;
 const SHAPES = [["line", "line", "Linia (/)"], ["arrow", "arrow", "Strzałka (A)"], ["rect", "rect", "Prostokąt (R)"], ["ellipse", "ellipse", "Elipsa (O)"]];
@@ -118,7 +119,14 @@ export function openCard(root, id) {
     onPick: (shot) => { if (shot) ai.addAttachment({ kind: "point", blob: shot.blob, thumb: shot.thumb, blocks: shot.blocks }); else toast("Nie udało się zrobić zrzutu zaznaczenia.", 4000); },
     onBusy: (v) => ai.setPointing(v)
   });
-  const bubble = createBubble({ editor, isDrawing: () => draw.isActive(), toast, onExplain: (t) => ai.send(`Wyjaśnij mi ten fragment:\n"${t.slice(0, 2000)}"`) });
+  const toBoard = (text) => {
+    const cc = getCard(id) || c;
+    let pos = editor.state.doc.content.size;
+    try { const $to = editor.state.selection.$to; if ($to.depth) pos = $to.after(1); } catch (e) {}
+    const context = [sub ? `School subject: ${sub.name}.` : "", cc.title ? `Lesson topic: ${cc.title}.` : "", `The student's own notes from this lesson, for reference:\n${docToPlain(editor.state.doc, 1800)}`].filter(Boolean).join("\n");
+    openBoard({ text: text || "", context, card: canEdit ? id : "", pos });
+  };
+  const bubble = createBubble({ editor, isDrawing: () => draw.isActive(), toast, onExplain: (t) => ai.send(`Wyjaśnij mi ten fragment:\n"${t.slice(0, 2000)}"`), onBoard: toBoard });
   const slash = createSlash({ editor, actions: () => [
     { icon: "image", label: "Obrazek lub gif", keys: "zdjecie foto gif plik", hint: "albo wklej", run: pickImage },
     { icon: "camera", label: "Zdjęcie aparatem", keys: "kamera foto", run: openCamera },
@@ -133,6 +141,7 @@ export function openCard(root, id) {
     { icon: "listNum", label: "Numeracja", keys: "lista numerowana", hint: "1.", run: () => editor.chain().focus().toggleOrderedList().run() },
     { icon: "quote", label: "Cytat", keys: "", hint: ">", run: () => editor.chain().focus().toggleBlockquote().run() },
     { icon: "mind", label: "Mapa myśli", keys: "mapa mysli pojec schemat", run: newMind },
+    { icon: "wand", label: "Tablica: AI wyjaśni, rysując", keys: "tablica board wyjasnij rysunek ai", run: () => toBoard("") },
     { icon: "pen", label: "Rysunek", keys: "rysuj szkic", run: () => setMode("draw") },
     { icon: "sign", label: "Mój podpis", keys: "podpis", hidden: !(isTest && canEdit), run: insertSignature }
   ] });
@@ -512,9 +521,17 @@ export function openCard(root, id) {
     if (lead && hasContent) editor.view.dispatch(editor.state.tr.delete(0, end));
   }
   const trimTimer = setTimeout(trimLeadingBlanks, 2200);
+  const boardShot = canEdit ? takeBoardInsert(id) : null;
+  const boardTimer = boardShot ? setTimeout(() => {
+    const size = editor.state.doc.content.size;
+    const pos = Math.min(Math.max(0, boardShot.pos || size), size);
+    editor.chain().insertContentAt(pos, { type: "image", attrs: { src: boardShot.src, alt: boardShot.alt || "Tablica", width: 620, align: "center" } }).run();
+    toast("Tablica wstawiona do notatki.", 2600);
+  }, 500) : 0;
 
   return {
     destroy() {
+      clearTimeout(boardTimer);
       document.removeEventListener("keydown", onKey);
       window.removeEventListener("resize", moveIndicator);
       document.removeEventListener("keyup", onKeyUp);

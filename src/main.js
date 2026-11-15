@@ -5,6 +5,7 @@ import { renderPicker, renderHome, renderSubject, renderPlan, renderTrash, rende
 import { openCard } from "./card.js";
 import { from, transition } from "./morph.js";
 import { installConnector } from "./apogee.js";
+import { renderBoard } from "./boardview.js";
 
 const root = document.getElementById("app");
 await resetLocalIfNeeded();
@@ -32,6 +33,7 @@ function route(force) {
   const key = location.hash;
   if (current && currentKey === key && !force) return;
   if (current && currentKey === key && force && parts[0] === "c" && !current.missing) return;
+  if (current && currentKey === key && current.board) return;
   if (current) { current.destroy && current.destroy(); current = null; }
   root.innerHTML = "";
   currentKey = key;
@@ -47,6 +49,7 @@ function route(force) {
     return Promise.race([ready, new Promise((r) => setTimeout(r, 700))]);
   }
   else if (parts[0] === "s" && parts[1]) renderSubject(root, parts[1], q.tab);
+  else if (parts[0] === "board") current = renderBoard(root);
   else if (parts[0] === "plan") renderPlan(root);
   else if (parts[0] === "trash") renderTrash(root);
   else if (parts[0] === "settings") renderSettings(root);
@@ -83,6 +86,7 @@ onChange((kind) => {
   if (me() && state.indexProvider.synced && !(users.get(me()) || {}).color) { pick(); return; }
   const { parts } = parse();
   if (parts[0] === "c") { if (current && current.missing && card(parts[1])) route(true); return; }
+  if (parts[0] === "board") return;
   const active = document.activeElement;
   if (active && /^(INPUT|TEXTAREA|SELECT)$/.test(active.tagName) && !active.closest(".search")) return;
   if (document.querySelector(".modal-bg, .pop-menu")) return;

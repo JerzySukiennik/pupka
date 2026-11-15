@@ -715,3 +715,15 @@ body.hide-cursors .collaboration-cursor__selection { background: transparent !im
   .draw-spacer { outline: 0 !important; }
   .misspelled { text-decoration: none !important; }
 }
+
+/* Tablica */
+main.board-page { display: flex; flex-direction: column; height: calc(100dvh - 60px); max-width: 1500px; margin: 0 auto; padding: 2px 22px max(16px, env(safe-area-inset-bottom)); }
+.board-host { flex: 1; min-height: 0; font-family: var(--ui); }
+.board-insert svg { width: 15px; height: 15px; }
+.board-insert:disabled { opacity: .45; cursor: default; }
+.board-insert.busy { opacity: .7; }
+@media (max-width: 720px) {
+  main.board-page { padding: 0 10px max(10px, env(safe-area-inset-bottom)); }
+  .board-insert span { display: none; }
+}
+@media print { main.board-page { display: none; } }

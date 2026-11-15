@@ -173,7 +173,7 @@ function homeRight() {
   return `<button class="search-pill" data-go="#/search" title="Szukaj we wszystkich notatkach (Cmd+K)">${icon("search", 15)}<span>Szukaj</span><kbd>⌘K</kbd></button>${presenceHtml(online, 26)}${state.showOffline ? `<span class="offline-pill" title="${offlineTitle()}">${icon("offline", 14)}<span>${offlineLabel()}</span></span>` : ""}<button class="icon-btn" data-go="#/settings" title="Ustawienia">${icon("settings2")}</button><button class="me-btn" data-go="#/switch" title="Zmień osobę">${avatarHtml({ name: me(), color: p.color, avatar: p.avatar }, 30)}</button>`;
 }
 function navHtml(on) {
-  return [["#/", "Dziś", "home"], ["#/plan", "Plan lekcji", "plan"], ["#/trash", "Kosz", "trash"]].map(([h, t, k]) => `<a href="${h}" class="${k === on ? "on" : ""}">${t}</a>`).join("");
+  return [["#/", "Dziś", "home"], ["#/plan", "Plan lekcji", "plan"], ["#/board", "Tablica", "board"], ["#/trash", "Kosz", "trash"]].map(([h, t, k]) => `<a href="${h}" class="${k === on ? "on" : ""}">${t}</a>`).join("");
 }
 
 function whoOn(cardId) { return presence().filter((s) => s.card === cardId).map((s) => s.user); }
