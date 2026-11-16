@@ -4,6 +4,8 @@ import { aiChat, aiRewrite, uploadImage } from "./net.js";
 import { parseMarkdown, docToBlocks, mdToHtml, esc } from "./md.js";
 import { me, allCards, subject, fmtDate, AI_COLOR, colorOf, uid } from "./store.js";
 import { icon } from "./icons.js";
+import { DESKTOP, media } from "./desktop.js";
+import { aiMode, setAiMode, localMode, warmLocal, LOCAL_LABEL } from "./localai.js";
 
 function cardsIndexText(currentId) {
   return allCards().filter((c) => c.id !== currentId && c.kind === "lesson").sort((a, b) => (b.date || "").localeCompare(a.date || "")).slice(0, 300)
@@ -63,6 +65,7 @@ const STEP = {
   draw_on_image: "Rysuję na obrazku", fill_on_image: "Koloruję obszary", draw_on_card: "Rysuję na kartce", delete_drawings: "Usuwam rysunki", edit_card: "Piszę zmiany w karcie", make_mind_map: "Robię mapę myśli", view_drawing: "Oglądam rysunek", fill_on_drawing: "Koloruję rysunek"
 };
 const SUGGEST = [["spell", "Popraw błędy", "Popraw na tej karcie tylko błędy formalne (wielkie litery, kropki, przecinki, literówki, ortografię). Nie zmieniaj treści; jeśli coś wygląda na błąd merytoryczny, tylko mi to wypisz."], ["wand", "Wyjaśnij prościej", "Wyjaśnij mi ten temat prościej, w kilku zdaniach."], ["layers", "Pytania powtórkowe", "Zrób 5 krótkich pytań powtórkowych z tej karty, z odpowiedziami na końcu."], ["image", "Obrazek do tematu", "Znajdź dobry obrazek do tego tematu i wstaw go w odpowiednie miejsce."]];
+const SUGGEST_LOCAL = [["wand", "Wyjaśnij prościej", "Wyjaśnij mi ten temat prościej, w kilku zdaniach."], ["layers", "Pytania powtórkowe", "Zrób 5 krótkich pytań powtórkowych z tej karty, z odpowiedziami na końcu."], ["list", "Streszczenie", "Streść tę notatkę w 5 krótkich punktach."]];
 const HOVER = matchMedia("(hover: hover)").matches;
 
 export function createAiIsland({ editor, entry, getCard, container, onEdited, draw, undo, insertMind }) {
@@ -70,7 +73,7 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
   container.className = "isl";
   container.innerHTML = `
     <div class="isl-body">
-      <div class="isl-head">${icon("sparkle", 15)}<b>AI</b><span class="isl-sub">wspólny czat tej karty</span><button type="button" class="icon-btn isl-close" title="Zwiń (Esc)">${icon("chevron", 16)}</button></div>
+      <div class="isl-head">${icon("sparkle", 15)}<b>AI</b><span class="isl-sub">${DESKTOP ? "czat tej karty" : "wspólny czat tej karty"}</span>${DESKTOP ? `<button type="button" class="isl-mode"></button>` : ""}<button type="button" class="icon-btn isl-close" title="Zwiń (Esc)">${icon("chevron", 16)}</button></div>
       <div class="ai-msgs"></div>
       <div class="ai-attach"></div>
     </div>
@@ -114,11 +117,28 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
     container.addEventListener("pointerleave", () => { hovering = false; clearTimeout(openTimer); maybeClose(); });
   }
   container.addEventListener("click", (e) => { if (!container.classList.contains("open") && !e.target.closest(".isl-stop")) { pinned = true; setOpen(true); ta.focus(); } });
-  ta.addEventListener("focus", () => setOpen(true));
+  ta.addEventListener("focus", () => { setOpen(true); if (localMode()) warm(); });
   ta.addEventListener("blur", () => maybeClose());
   const onDocDown = (e) => { if (container.contains(e.target) || e.shiftKey || e.target.closest(".page.pointing, .modal-bg")) return; pinned = false; maybeClose(); };
   document.addEventListener("pointerdown", onDocDown, true);
   container.querySelector(".isl-close").addEventListener("click", (e) => { e.stopPropagation(); pinned = false; hovering = false; ta.blur(); setOpen(false); });
+
+  const modeBtn = container.querySelector(".isl-mode");
+  function paintMode() {
+    if (!modeBtn) return;
+    const local = localMode();
+    modeBtn.textContent = local ? "Lokalnie" : "Claude";
+    modeBtn.classList.toggle("local", local);
+    modeBtn.title = local ? (aiMode() === "local" ? `Odpowiada ${LOCAL_LABEL} na tym Macu, bez internetu. Kliknij, żeby przełączyć na Claude.` : `Nie ma internetu, więc odpowiada ${LOCAL_LABEL} na tym Macu.`) : "Odpowiada Claude przez internet. Kliknij, żeby przełączyć na model lokalny.";
+    container.classList.toggle("local", local);
+  }
+  const suggestions = () => (localMode() ? SUGGEST_LOCAL : SUGGEST);
+  const warm = () => { const c = getCard(); const sub = subject(c.subject); warmLocal({ subject: sub ? sub.name : "", title: c.title, date: fmtDate(c.date), blocks: docToBlocks(editor.state.doc) }); };
+  if (modeBtn) {
+    modeBtn.addEventListener("click", (e) => { e.stopPropagation(); if (busy) return; setAiMode(aiMode() === "local" ? "claude" : "local"); paintMode(); render(); if (localMode()) warm(); });
+    window.addEventListener("online", paintMode);
+    window.addEventListener("offline", paintMode);
+  }
 
   function paintPeek() {
     container.classList.toggle("busy", busy);
@@ -153,27 +173,28 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
     const arr = chat.toArray();
     if (arr.length - 1 > lastIdx && lastIdx >= 0 && arr[arr.length - 1].role === "assistant" && !container.classList.contains("open")) unread = true;
     lastIdx = arr.length - 1;
-    msgs.innerHTML = arr.map((m, i) => msgHtml(m, i)).join("") || `<div class="ai-empty"><p>Widzę całą tę kartę i mogę czytać inne. Poprawię, dopiszę, wyjaśnię, narysuję albo znajdę obrazek. Shift + obrysuj fragment kartki, żeby mi coś pokazać.</p></div>`;
-    msgs.insertAdjacentHTML("beforeend", busy ? "" : `<div class="ai-suggest">${SUGGEST.map(([ic, label], i) => `<button type="button" data-sug="${i}">${icon(ic, 14)}<span>${label}</span></button>`).join("")}</div>`);
+    msgs.innerHTML = arr.map((m, i) => msgHtml(m, i)).join("") || `<div class="ai-empty"><p>${localMode() ? "Odpowiadam na tym Macu, bez internetu. Widzę tekst tej karty: wyjaśnię, streszczę i odpytam. Obrazków i rysunków nie widzę, a karty sam nie zmieniam." : "Widzę całą tę kartę i mogę czytać inne. Poprawię, dopiszę, wyjaśnię, narysuję albo znajdę obrazek. Shift + obrysuj fragment kartki, żeby mi coś pokazać."}</p></div>`;
+    msgs.insertAdjacentHTML("beforeend", busy ? "" : `<div class="ai-suggest">${suggestions().map(([ic, label], i) => `<button type="button" data-sug="${i}">${icon(ic, 14)}<span>${label}</span></button>`).join("")}</div>`);
     if (liveEl) msgs.appendChild(liveEl);
     msgs.scrollTop = msgs.scrollHeight;
     paintPeek();
   }
   function msgHtml(m, i) {
-    if (m.role === "user") return `<div class="msg user"><span class="who"><i style="background:${colorOf(m.name)}"></i>${esc(m.name)}</span><div class="bubble-u">${esc(m.text)}</div>${(m.attachments || []).length ? `<div class="ai-imgs">${m.attachments.map((a) => `<a href="${esc(a.url)}" target="_blank" title="${a.kind === "point" ? "zaznaczenie na kartce" : "obraz"}"><img src="${esc(a.url)}" alt=""></a>`).join("")}</div>` : ""}</div>`;
+    if (m.role === "user") return `<div class="msg user"><span class="who"><i style="background:${colorOf(m.name)}"></i>${esc(m.name)}</span><div class="bubble-u">${esc(m.text)}</div>${(m.attachments || []).length ? `<div class="ai-imgs">${m.attachments.map((a) => `<a href="${esc(a.url)}" target="_blank" title="${a.kind === "point" ? "zaznaczenie na kartce" : "obraz"}"><img src="${esc(media(a.url))}" alt=""></a>`).join("")}</div>` : ""}</div>`;
     const html = mdToHtml(m.text || "");
-    const imgs = (m.images || []).map((im) => `<a href="${esc(im.url)}" target="_blank"><img src="${esc(im.url)}" alt=""></a>`).join("");
+    const imgs = (m.images || []).map((im) => `<a href="${esc(im.url)}" target="_blank"><img src="${esc(media(im.url))}" alt=""></a>`).join("");
     const acts = [];
     if (m.edited && i === lastIdx) acts.push(`<button class="ai-undo" type="button">${icon("undo", 13)}<span>Cofnij zmiany AI</span></button>`);
     if (m.text && m.text.trim() && !m.edited) acts.push(`<button class="ai-insert" type="button" data-i="${i}">${icon("plus", 13)}<span>Wstaw do notatki</span></button>`);
     return `<div class="msg ai"><span class="who"><i class="ai-dot"></i>AI${m.name ? " · dla " + esc(m.name) : ""}</span>${(m.steps || []).length ? `<div class="steps">${m.steps.map((t) => `<span class="done">${icon("check", 13)}${esc(t)}</span>`).join("")}</div>` : ""}<div class="ai-text">${html}</div>${imgs ? `<div class="ai-imgs">${imgs}</div>` : ""}${m.edited ? `<div class="ai-note">Zmieniłem kartę.</div>` : ""}${acts.length ? `<div class="ai-acts">${acts.join("")}</div>` : ""}</div>`;
   }
   chat.observe(render);
+  paintMode();
   render();
 
   msgs.addEventListener("click", (e) => {
     const sg = e.target.closest("[data-sug]");
-    if (sg) { send(SUGGEST[+sg.dataset.sug][2]); return; }
+    if (sg) { send(suggestions()[+sg.dataset.sug][2]); return; }
     const u = e.target.closest(".ai-undo");
     if (u) { u.disabled = true; u.querySelector("span").textContent = "Cofnięto"; undo && undo(); draw && draw.rerender(); return; }
     const b = e.target.closest(".ai-insert");
@@ -255,7 +276,10 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
     function step(t) { if (current && current !== t) steps.push(current); current = t; paintSteps(); }
     function settle() { if (current) { steps.push(current); current = null; paintSteps(); } }
     const sent = [];
-    if (pending.length) {
+    const local = localMode();
+    paintMode();
+    if (local) pending.forEach((a) => { if (a.thumb) URL.revokeObjectURL(a.thumb); });
+    if (pending.length && !local) {
       step("Wysyłam załączniki");
       for (const a of pending) {
         try {
@@ -278,13 +302,13 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
     const pendingWork = [];
     let imgsForAI = imagesList();
     const imageTalk = IMAGE_TALK.test(text.replace(/map\S*\s+(myśl|pojęć)\S*/gi, ""));
-    if (imgsForAI.length && (imageTalk || sent.some((a) => a.kind === "point"))) {
+    if (!local && imgsForAI.length && (imageTalk || sent.some((a) => a.kind === "point"))) {
       step("Przygotowuję obrazki");
       imgsForAI = await gridded(imgsForAI.slice(0, 4)).then((g) => g.concat(imgsForAI.slice(4)));
     }
     const blockOf = (bid) => { const i = bids.indexOf(bid); return i >= 0 ? i + 1 : 0; };
     let drawingsList = draw ? draw.drawings(blockOf) : [];
-    if (drawingsList.length && imageTalk) {
+    if (!local && drawingsList.length && imageTalk) {
       step("Przygotowuję rysunki");
       for (const d of drawingsList.slice(0, 4)) {
         try {
@@ -295,7 +319,7 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
       }
     }
     drawingsList = drawingsList.map(({ n, desc, grid_url }) => ({ n, desc, grid_url }));
-    step("Czytam kartę");
+    step(local ? "Czytam kartę lokalnie" : "Czytam kartę");
     if (entry.provider) entry.provider.awareness.setLocalStateField("ai", { by: name });
     let stopped = false;
     try {
@@ -369,7 +393,7 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
     },
     isOpen() { return container.classList.contains("open"); },
     focus() { ta.focus(); },
-    destroy() { chat.unobserve(render); stop(); document.removeEventListener("pointerdown", onDocDown, true); clearTimeout(closeTimer); fx.remove(); }
+    destroy() { chat.unobserve(render); stop(); document.removeEventListener("pointerdown", onDocDown, true); window.removeEventListener("online", paintMode); window.removeEventListener("offline", paintMode); clearTimeout(closeTimer); fx.remove(); }
   };
   return api;
 }

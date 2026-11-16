@@ -6,6 +6,7 @@ import { openCard } from "./card.js";
 import { from, transition } from "./morph.js";
 import { installConnector } from "./apogee.js";
 import { renderBoard } from "./boardview.js";
+import { DESKTOP } from "./desktop.js";
 
 const root = document.getElementById("app");
 await resetLocalIfNeeded();
@@ -96,15 +97,17 @@ onChange((kind) => {
   queueMicrotask(() => { routeQueued = false; route(true); });
 });
 window.addEventListener("pupka:search", openSearch);
-window.addEventListener("pupka:switch", pick);
+window.addEventListener("pupka:switch", () => { if (!DESKTOP) pick(); });
 document.addEventListener("keydown", (e) => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); if (me()) openSearch(); }
 });
 
 root.innerHTML = `<div class="empty">Ładuję…</div>`;
 await state.ready;
-const saved = sessionStorage.getItem("pupka-me");
-if (saved && NAMES.includes(saved) && (users.get(saved) || {}).color) {
+const saved = DESKTOP ? await (await import("./deskapp.js")).desktopBoot(root) : sessionStorage.getItem("pupka-me");
+if (DESKTOP && !saved) {
+  picking = true;
+} else if (saved && NAMES.includes(saved) && (users.get(saved) || {}).color) {
   setMe(saved);
   if (!parse().parts.length) { document.body.classList.add("home-enter"); setTimeout(() => document.body.classList.remove("home-enter"), 1800); }
   route(true);
@@ -120,7 +123,7 @@ async function signature() {
   for (const t of parts) { h = (h * 31 + t.length) | 0; for (let i = 0; i < t.length; i += 97) h = (h * 31 + t.charCodeAt(i)) | 0; }
   return parts.every((t) => !t) ? null : String(h);
 }
-if (!/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) {
+if (!DESKTOP && !/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) {
   let base = null, stale = false;
   signature().then((sig) => { base = sig; });
   const check = async () => {

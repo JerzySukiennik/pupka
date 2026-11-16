@@ -1,5 +1,7 @@
 /* Region fill on images: flood fill from a seed point up to the lines of the image, gaps in dashed lines are closed, result traced to polygon rings. */
 
+import { media } from "./desktop.js";
+
 const cache = new Map();
 
 export function loadPixels(url, maxSide = 1000) {
@@ -18,7 +20,7 @@ export function loadPixels(url, maxSide = 1000) {
       try { resolve({ w, h, data: g.getImageData(0, 0, w, h).data }); } catch (e) { reject(new Error("Tego obrazka nie da się odczytać (obcy serwer).")); }
     };
     img.onerror = () => reject(new Error("Nie udało się wczytać obrazka."));
-    img.src = url;
+    img.src = media(url);
   });
   cache.set(url, p);
   p.catch(() => cache.delete(url));

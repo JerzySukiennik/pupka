@@ -8,6 +8,8 @@ import { esc } from "./md.js";
 import { userWords, removeUserWord, spellStatus, loadSpeller, reloadSpeller } from "./spell.js";
 import { SLOTS, DAY_NAMES, WEEK, lessonsOn, lessonNow, sameOptions, groupOf } from "./timetable.js";
 import { from as morphFrom, vt, NAMES as VT } from "./morph.js";
+import { DESKTOP, media } from "./desktop.js";
+import { desktopSettingsHtml, bindDesktopSettings } from "./deskapp.js";
 
 const WEEKDAYS = ["niedziela", "poniedziałek", "wtorek", "środa", "czwartek", "piątek", "sobota"];
 function go(hash) { location.hash = hash; }
@@ -230,7 +232,7 @@ export function renderHome(root) {
         <button class="toc-new" data-new-subject>${icon("plus", 15)}<span>Nowy przedmiot</span></button>
       </section>
       <section class="recent"><h2>Ostatnie kartki</h2>
-        <div class="thumbs">${recent.length ? recent.map((c, hi) => { const s = subject(c.subject); const who = whoOn(c.id); return `<a class="thumb" href="#/c/${c.id}" style="--i:${hi};--rot:${hi % 2 ? 4 : -4}deg"><small>${esc(s ? s.name : "")}${c.kind === "test" ? " · na ocenę" : ""}</small><b>${esc(cardLabel(c))}</b><p>${esc(snippet(c))}</p>${c.img ? `<img src="${esc(c.img)}" alt="" loading="lazy">` : ""}<span class="th-foot"><span>${esc(fmtDate(c.date))}</span>${presenceHtml(who, 18)}</span></a>`; }).join("") : `<div class="empty-list">Tu pojawią się ostatnio pisane kartki.</div>`}</div>
+        <div class="thumbs">${recent.length ? recent.map((c, hi) => { const s = subject(c.subject); const who = whoOn(c.id); return `<a class="thumb" href="#/c/${c.id}" style="--i:${hi};--rot:${hi % 2 ? 4 : -4}deg"><small>${esc(s ? s.name : "")}${c.kind === "test" ? " · na ocenę" : ""}</small><b>${esc(cardLabel(c))}</b><p>${esc(snippet(c))}</p>${c.img ? `<img src="${esc(media(c.img))}" alt="" loading="lazy">` : ""}<span class="th-foot"><span>${esc(fmtDate(c.date))}</span>${presenceHtml(who, 18)}</span></a>`; }).join("") : `<div class="empty-list">Tu pojawią się ostatnio pisane kartki.</div>`}</div>
       </section>
     </div>
     <img class="watermark home-wm" src="assets/gzowo-labs-fire.gif" alt="Gzowo Labs">
@@ -392,19 +394,20 @@ export function renderSettings(root) {
       <div class="profile-fields"><div class="swatches big">${PALETTE.map((c) => `<button data-mycolor="${c}" style="--c:${c}" class="${c === p.color ? "on" : ""}" title="Kolor"></button>`).join("")}</div>
       <label>Imię i nazwisko (na kartkówkach, klasa 8K)<input data-me="fullName" value="${esc(p.fullName || "")}"></label></div></div>
       <label>Podpis odręczny do kartkówek</label>
-      <div class="sig-box"><canvas class="sig" width="560" height="200"></canvas><div class="sig-actions"><button class="btn" data-sig="clear">Wyczyść</button><button class="btn primary" data-sig="save">Zapisz podpis</button>${p.signature ? `<img class="sig-preview" src="${esc(p.signature)}" alt="podpis">` : ""}</div></div>
+      <div class="sig-box"><canvas class="sig" width="560" height="200"></canvas><div class="sig-actions"><button class="btn" data-sig="clear">Wyczyść</button><button class="btn primary" data-sig="save">Zapisz podpis</button>${p.signature ? `<img class="sig-preview" src="${esc(media(p.signature))}" alt="podpis">` : ""}</div></div>
     </section>
     <section><div class="eyebrow">Słownik pisowni</div>
       <p class="muted hint">Błędy podkreśla Pupka (czerwona falka). Kliknij podkreślone słowo, żeby wybrać poprawkę, dodać je do słownika albo zignorować. Nic nie poprawia się samo. Słowa dodane do słownika są wspólne dla was wszystkich.</p>
       <div class="dict-status" data-dict-status></div>
       <div class="dict-words">${userWords().length ? userWords().map((w) => `<span class="dict-chip">${esc(w)}<button data-rmword="${esc(w)}" title="Usuń ze słownika">${icon("close", 12)}</button></span>`).join("") : `<span class="muted">Jeszcze nic nie dodaliście.</span>`}</div>
     </section>
-    <section><div class="eyebrow">Ten komputer</div>
+    ${DESKTOP ? desktopSettingsHtml() : `<section><div class="eyebrow">Ten komputer</div>
       <button class="btn" data-go="#/switch">Zmień osobę</button>
-    </section>
+    </section>`}
     <img class="watermark settings-wm" src="assets/gzowo-labs-fire.gif" alt="Gzowo Labs">
   </main>`;
   const main = root.querySelector("main");
+  if (DESKTOP) bindDesktopSettings(root);
   const paintDict = () => {
     const el = main.querySelector("[data-dict-status]");
     if (!el) return;

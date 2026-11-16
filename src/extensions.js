@@ -3,6 +3,7 @@
 import { Node, Extension, mergeAttributes, InputRule, wrappingInputRule, Plugin, PluginKey, katex, Image, NodeSelection, TextSelection } from "../lib/vendor.js";
 import { uid } from "./store.js";
 import { icon } from "./icons.js";
+import { media } from "./desktop.js";
 
 export const BLOCK_TYPES = ["paragraph", "heading", "bulletList", "orderedList", "blockquote", "codeBlock", "horizontalRule", "table", "image", "callout", "testHeader", "spacer"];
 
@@ -265,7 +266,7 @@ export const ResizableImage = Image.extend({
 
       const apply = (n) => {
         const a = n.attrs;
-        img.src = a.src;
+        img.src = media(a.src);
         img.alt = a.alt || "";
         img.style.width = a.width ? a.width + "px" : "";
         dom.dataset.align = a.align || "center";

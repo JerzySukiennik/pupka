@@ -23,5 +23,5 @@ export function canAnimate() { return !!document.startViewTransition && !matchMe
 
 export function transition(update) {
   if (!canAnimate()) { update(); return; }
-  try { document.startViewTransition(update); } catch (e) { update(); }
+  try { const t = document.startViewTransition(update); if (t && t.ready) t.ready.catch(() => {}); } catch (e) { update(); }
 }

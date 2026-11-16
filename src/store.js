@@ -2,6 +2,7 @@
 
 import { Y, WebsocketProvider, IndexeddbPersistence } from "../lib/vendor.js";
 import { WS } from "./net.js";
+import { DESKTOP, native, filePersist, offlineProvider } from "./desktop.js";
 
 export const EPOCH = 3;
 export const INDEX_ROOM = EPOCH > 1 ? `index-e${EPOCH}` : "index";
@@ -37,6 +38,7 @@ export function fmtDateLong(iso) {
 }
 
 export async function resetLocalIfNeeded() {
+  if (DESKTOP) return false;
   let have = null;
   try { have = localStorage.getItem("pupka-epoch"); } catch (e) { /* storage blocked */ }
   if (have === String(EPOCH)) return false;
@@ -54,6 +56,15 @@ export async function resetLocalIfNeeded() {
 
 export function connectIndex() {
   if (state.indexProvider) return state.indexProvider;
+  if (DESKTOP) {
+    const files = filePersist(index, () => native("store.readIndex"), (ydoc) => native("store.writeIndex", { ydoc }));
+    state.indexStore = files;
+    state.ready = files.whenSynced;
+    state.online = true;
+    state.indexProvider = offlineProvider(INDEX_ROOM, index);
+    index.on("update", () => { emit("index"); queueReconcile(); });
+    return state.indexProvider;
+  }
   const idb = new IndexeddbPersistence("pupka-index-e" + EPOCH, index);
   const p = new WebsocketProvider(WS, INDEX_ROOM, index, { maxBackoffTime: 8000 });
   state.ready = Promise.race([
@@ -77,10 +88,11 @@ function setConnected(v) {
 }
 export function offlineLabel() { return navigator.onLine === false ? "offline" : "bez synchronizacji"; }
 export function offlineTitle() { return navigator.onLine === false ? "Nie ma internetu. Zmiany zapisują się na tym urządzeniu i wyślą się same, gdy wróci sieć." : "Serwer Pupki chwilowo nie odpowiada. Zmiany zapisują się na tym urządzeniu i wyślą się same, gdy wróci połączenie."; }
-window.addEventListener("offline", () => { state.showOffline = true; emit("status"); });
+window.addEventListener("offline", () => { if (DESKTOP) return; state.showOffline = true; emit("status"); });
 let pauseTimer = 0;
 const liveProviders = () => [state.indexProvider].concat(Array.from(docCache.values()).map((e) => e.provider)).filter(Boolean);
 document.addEventListener("visibilitychange", () => {
+  if (DESKTOP) return;
   clearTimeout(pauseTimer);
   if (document.hidden) pauseTimer = setTimeout(() => { state.paused = true; liveProviders().forEach((p) => p.disconnect()); }, 45000);
   else if (state.paused) { state.paused = false; liveProviders().forEach((p) => p.connect()); setConnected(state.online); }
@@ -194,12 +206,27 @@ export function trashItems() {
   return out.sort((a, b) => b.deleted - a.deleted);
 }
 
+export function cardMeta(id) {
+  const c = cards.get(id) || {};
+  const s = subjects.get(c.subject) || {};
+  return { subject: s.name || "", title: c.title || "", date: c.date || "", kind: c.kind || "lesson", owner: c.owner || "", name: c.name || "", text: String(c.text || "").slice(0, 4000), deleted: !!c.deleted || !!s.deleted };
+}
+let reconcileTimer = 0;
+function queueReconcile() {
+  clearTimeout(reconcileTimer);
+  reconcileTimer = setTimeout(() => {
+    const all = {};
+    cards.forEach((c, id) => { all[id] = cardMeta(id); });
+    native("store.reconcile", { cards: all }).then(() => { docCache.forEach((e) => e.idb.touch()); }).catch((e) => console.error("porządek plików", e));
+  }, 2500);
+}
+
 const docCache = new Map();
 export function openCardDoc(id) {
   if (docCache.has(id)) { const e = docCache.get(id); e.refs++; return e; }
   const doc = new Y.Doc();
-  const idb = new IndexeddbPersistence("pupka-card-" + id, doc);
-  const provider = new WebsocketProvider(WS, "card:" + id, doc, { maxBackoffTime: 8000 });
+  const idb = DESKTOP ? filePersist(doc, () => native("store.readCard", { id }), (ydoc) => native("store.writeCard", { id, ydoc, meta: cardMeta(id) })) : new IndexeddbPersistence("pupka-card-" + id, doc);
+  const provider = DESKTOP ? offlineProvider("card:" + id, doc) : new WebsocketProvider(WS, "card:" + id, doc, { maxBackoffTime: 8000 });
   const entry = { doc, idb, provider, refs: 1, id };
   docCache.set(id, entry);
   return entry;
@@ -263,7 +290,7 @@ export function createTest(subjectId, name, testKind) {
   const cls = CLASS;
   const ids = [];
   index.transact(() => {
-    for (const owner of NAMES) {
+    for (const owner of (DESKTOP ? [state.me || NAMES[0]] : NAMES)) {
       const prof = users.get(owner) || {};
       const id = createCard({ subject: subjectId, kind: "test", testKind, name, owner, group, date, title: name });
       ids.push({ id, owner, fullName: prof.fullName || owner });

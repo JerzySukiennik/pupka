@@ -727,3 +727,27 @@ main.board-page { display: flex; flex-direction: column; height: calc(100dvh - 6
   .board-insert span { display: none; }
 }
 @media print { main.board-page { display: none; } }
+
+/* Pupka for macOS */
+html.desktop .offline-pill, html.desktop .presence-strip { display: none; }
+html.desktop .me-btn { pointer-events: none; }
+.desk-welcome { min-height: 100dvh; display: grid; place-items: center; padding: 32px; }
+.desk-card { width: min(560px, 100%); padding: 38px 40px 34px; border-radius: 22px; background: var(--paper); border: 1px solid var(--line); box-shadow: 0 30px 70px -40px rgba(60, 45, 20, .45); animation: desk-in .7s var(--spring) both; }
+.desk-card h1 { font: 500 34px/1.12 var(--serif); letter-spacing: -.015em; margin: 6px 0 14px; }
+.desk-card p { color: var(--fg2); font-size: 15px; line-height: 1.55; margin: 0 0 12px; }
+.desk-card p b { color: var(--fg); font-weight: 600; }
+.desk-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+.desk-actions[hidden], .desk-bar[hidden] { display: none; }
+.desk-bar { height: 6px; margin-top: 22px; border-radius: 3px; background: var(--bg3); overflow: hidden; }
+.desk-bar i { display: block; height: 100%; width: 0; border-radius: 3px; background: var(--accent); transition: width .5s cubic-bezier(.2, .8, .2, 1); }
+.desk-status { min-height: 22px; margin-top: 12px; font-size: 14px; color: var(--fg2); }
+.desk-status.bad { color: #c0392b; }
+@keyframes desk-in { from { opacity: 0; transform: translateY(14px) scale(.98); } }
+.desk-toast { position: fixed; z-index: 60; left: 22px; bottom: 22px; max-width: 420px; padding: 11px 16px; border-radius: 14px; background: var(--fg); color: var(--paper); font-size: 13.5px; line-height: 1.4; box-shadow: 0 16px 40px -18px rgba(0, 0, 0, .5); opacity: 0; transform: translateY(10px); pointer-events: none; transition: opacity .25s ease, transform .4s var(--spring); }
+.desk-toast.on { opacity: 1; transform: none; }
+.desk-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0 14px; }
+.isl-mode { height: 24px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line2); background: none; color: var(--fg2); font-size: 11.5px; font-weight: 600; letter-spacing: .01em; transition: background .2s, color .2s, border-color .2s, transform .25s var(--spring); }
+.isl-mode:hover { border-color: var(--fg3); }
+.isl-mode:active { transform: scale(.94); }
+.isl-mode.local { background: var(--fg); border-color: var(--fg); color: var(--paper); }
+.isl.local .isl-clip { display: none; }

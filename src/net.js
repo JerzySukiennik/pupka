@@ -1,7 +1,10 @@
 /* Network helpers: API base, image upload with client-side downscale, AI streaming. */
 
+import { DESKTOP, native, toBase64, mediaName } from "./desktop.js";
+import { localMode, localChat, localRewrite } from "./localai.js";
+
 const LOCAL = ["localhost", "127.0.0.1"].includes(location.hostname);
-export const API = LOCAL ? "http://127.0.0.1:8787" : "https://pupka-api.kalakasanyt.workers.dev";
+export const API = DESKTOP ? "pupka://app/proxy/api" : LOCAL ? "http://127.0.0.1:8787" : "https://pupka-api.kalakasanyt.workers.dev";
 export const WS = API.replace(/^http/, "ws") + "/ws";
 
 export function shrinkImage(file, max = 1600, quality = 0.86) {
@@ -36,6 +39,10 @@ export async function uploadImage(file, who, max = 1600) {
   if (isGif && !keepGif) throw new Error("GIF jest za duży (max 14 MB).");
   if (!keepGif && (file.size > 1_500_000 || max < 1600 || !/^image\/(jpeg|png|webp)$/.test(file.type))) blob = await shrinkImage(file, max);
   if (blob.size > 1_800_000 && !keepGif) blob = await shrinkImage(blob, 1200, 0.75);
+  if (DESKTOP) {
+    const ext = (blob.type || "image/jpeg").split("/")[1].replace("jpeg", "jpg").replace("svg+xml", "svg");
+    return native("media.save", { data: toBase64(new Uint8Array(await blob.arrayBuffer())), ext });
+  }
   let r;
   try { r = await fetch(API + "/media", { method: "POST", headers: { "content-type": blob.type || "image/jpeg", "x-pupka-name": who || "x" }, body: blob }); }
   catch (e) { throw new Error("Brak połączenia z serwerem. Sprawdź sieć i spróbuj jeszcze raz."); }
@@ -50,6 +57,7 @@ export async function importImageUrl(url) {
   catch (e) { throw new Error("Brak połączenia z serwerem. Sprawdź sieć i spróbuj jeszcze raz."); }
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || "Nie udało się pobrać obrazka.");
+  if (DESKTOP && mediaName(j.url)) await native("media.ensure", { names: [mediaName(j.url)] }).catch(() => null);
   return j.url;
 }
 
@@ -63,6 +71,7 @@ export function dataUrlToBlob(dataUrl) {
 }
 
 export async function aiChat(payload, onEvent, signal) {
+  if (localMode()) return localChat(payload, onEvent, signal);
   const r = await fetch(API + "/ai/chat", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload), signal });
   if (!r.ok) {
     const j = await r.json().catch(() => ({}));
@@ -86,6 +95,7 @@ export async function aiChat(payload, onEvent, signal) {
 }
 
 export async function aiRewrite(payload) {
+  if (localMode()) return localRewrite(payload);
   const r = await fetch(API + "/ai/rewrite", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
   const j = await r.json().catch(() => ({}));
   if (!r.ok) throw new Error(j.error || "AI nie odpowiada");

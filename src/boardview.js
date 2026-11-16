@@ -4,9 +4,10 @@ import { mountBoard } from "./board/ui.js";
 import { topbar } from "./ui.js";
 import { me, card as getCard } from "./store.js";
 import { uploadImage } from "./net.js";
+import { DESKTOP } from "./desktop.js";
 
 const LOCAL = ["localhost", "127.0.0.1"].includes(location.hostname);
-const BOARD_API = LOCAL ? "http://127.0.0.1:8797" : "https://board-api.kalakasanyt.workers.dev";
+const BOARD_API = DESKTOP ? "pupka://app/proxy/board" : LOCAL ? "http://127.0.0.1:8797" : "https://board-api.kalakasanyt.workers.dev";
 const HANDOFF = "pupka-board";
 const INSERT = "pupka-board-insert";
 const STUDENT = "The student is in the 8th grade of a Polish primary school (about 14 years old). Explain at that level and in Polish.";
