@@ -751,3 +751,4 @@ html.desktop .me-btn { pointer-events: none; }
 .isl-mode:active { transform: scale(.94); }
 .isl-mode.local { background: var(--fg); border-color: var(--fg); color: var(--paper); }
 .isl.local .isl-clip { display: none; }
+.ai-wait { color: var(--fg3); font-style: italic; }

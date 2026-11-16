@@ -9,6 +9,7 @@ import { esc } from "./md.js";
 const ME = "Jurek";
 const SEEN = "pupka-pulled";
 const STARTED = "pupka-desk-started";
+const PLACE = "pupka-desk-place";
 
 function fetchRemote(room, timeout = 25000) {
   return new Promise((resolve, reject) => {
@@ -183,6 +184,12 @@ export async function desktopBoot(root) {
   try { localStorage.setItem(STARTED, "1"); } catch (e) { /* storage blocked */ }
   ensureMe();
   window.pupkaPull = () => pullWithToast(false);
+  try {
+    const place = localStorage.getItem(PLACE) || "";
+    const id = /^#\/c\/([a-z0-9]+)$/.exec(place);
+    if (!location.hash.replace(/^#\/?$/, "") && (id ? cards.get(id[1]) && !cards.get(id[1]).deleted : /^#\/(s\/[a-z0-9]+|plan)$/.test(place))) history.replaceState(null, "", place);
+  } catch (e) { /* storage blocked */ }
+  window.addEventListener("hashchange", () => { try { localStorage.setItem(PLACE, location.hash); } catch (e) { /* storage blocked */ } });
   return ME;
 }
 

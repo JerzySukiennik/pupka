@@ -186,7 +186,7 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
     const acts = [];
     if (m.edited && i === lastIdx) acts.push(`<button class="ai-undo" type="button">${icon("undo", 13)}<span>Cofnij zmiany AI</span></button>`);
     if (m.text && m.text.trim() && !m.edited) acts.push(`<button class="ai-insert" type="button" data-i="${i}">${icon("plus", 13)}<span>Wstaw do notatki</span></button>`);
-    return `<div class="msg ai"><span class="who"><i class="ai-dot"></i>AI${m.name ? " · dla " + esc(m.name) : ""}</span>${(m.steps || []).length ? `<div class="steps">${m.steps.map((t) => `<span class="done">${icon("check", 13)}${esc(t)}</span>`).join("")}</div>` : ""}<div class="ai-text">${html}</div>${imgs ? `<div class="ai-imgs">${imgs}</div>` : ""}${m.edited ? `<div class="ai-note">Zmieniłem kartę.</div>` : ""}${acts.length ? `<div class="ai-acts">${acts.join("")}</div>` : ""}</div>`;
+    return `<div class="msg ai"><span class="who"><i class="ai-dot"></i>AI${m.local ? " · lokalnie" : m.name && !DESKTOP ? " · dla " + esc(m.name) : ""}</span>${(m.steps || []).length ? `<div class="steps">${m.steps.map((t) => `<span class="done">${icon("check", 13)}${esc(t)}</span>`).join("")}</div>` : ""}<div class="ai-text">${html}</div>${imgs ? `<div class="ai-imgs">${imgs}</div>` : ""}${m.edited ? `<div class="ai-note">Zmieniłem kartę.</div>` : ""}${acts.length ? `<div class="ai-acts">${acts.join("")}</div>` : ""}</div>`;
   }
   chat.observe(render);
   paintMode();
@@ -335,6 +335,7 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
         if (ctrl.signal.aborted) return;
         if (ev.t === "delta") { if (current && !acc) settle(); acc += ev.text; textEl.innerHTML = mdToHtml(acc); msgs.scrollTop = msgs.scrollHeight; }
         else if (ev.t === "tool") step(STEP[ev.name] || "Pracuję");
+        else if (ev.t === "wait") { if (!acc) textEl.innerHTML = `<span class="ai-wait">${esc(ev.text)}</span>`; }
         else if (ev.t === "status") { const t = ev.text.charAt(0).toUpperCase() + ev.text.slice(1); current = t; paintSteps(); }
         else if (ev.t === "images") { images.push(...(ev.items || [])); }
         else if (ev.t === "draw") { if (!editor.isEditable || !draw) { acc += "\n(Nie mogę rysować na tej karcie.)"; return; } const n = applyDrawing(editor, draw, bids, ev); if (n) edited = true; else acc += "\n(Rysunek nie wyszedł, spróbuj jeszcze raz.)"; }
@@ -374,7 +375,9 @@ export function createAiIsland({ editor, entry, getCard, container, onEdited, dr
     ctrl = null;
     stepText = "";
     if (!container.classList.contains("open")) unread = true;
-    chat.push([{ role: "assistant", name, text: acc.trim(), ts: Date.now(), edited, images: images.slice(0, 3), steps: steps.slice(0, 12) }]);
+    const answer = { role: "assistant", name, text: acc.trim(), ts: Date.now(), edited, images: images.slice(0, 3), steps: steps.slice(0, 12) };
+    if (local) answer.local = true;
+    chat.push([answer]);
     if (entry.provider) entry.provider.awareness.setLocalStateField("ai", null);
     render();
   }

@@ -19,12 +19,16 @@ export function localMode() {
   return DESKTOP && (aiMode() === "local" || navigator.onLine === false);
 }
 
-const SYSTEM = `Jesteś pomocnikiem do nauki w notatniku szkolnym Pupka. Rozmawiasz po polsku z uczniem 8 klasy, który ma przed sobą otwartą notatkę z lekcji.
+const SYSTEM = `Jesteś korepetytorem w notatniku szkolnym Pupka. Rozmawiasz po polsku z uczniem 8 klasy i pomagasz mu z każdego przedmiotu.
+
+Odpowiadasz na każde pytanie ucznia, z dowolnego przedmiotu. Na końcu tej wiadomości, między znacznikami <kartka> i </kartka>, jest kartka, którą uczeń ma teraz otwartą. Kartka to tylko tło, nigdy jej nie przepisujesz ani nie doklejasz do odpowiedzi:
+- Gdy pytanie dotyczy kartki (wyjaśnij, streść, odpytaj, co tu jest napisane), korzystasz z niej.
+- Gdy pytanie dotyczy czegoś, czego na kartce nie ma, albo zupełnie innego przedmiotu, po prostu odpowiadasz z własnej wiedzy. Nie piszesz, że tego nie ma w notatce, nie zgadujesz, czemu uczeń o to pyta, i nie pytasz, czy na pewno chce odpowiedzi. Zapytał, więc chce wiedzieć.
 
 Jak odpowiadasz:
+- Pierwsze zdanie jest już odpowiedzią. Bez wstępów typu „Oczywiście!” i bez powtarzania pytania.
 - Krótko i konkretnie, zwykle 3-8 zdań albo krótka lista. Dłużej tylko wtedy, gdy uczeń o to prosi.
-- Prostym, naturalnym polskim, jak dobry korepetytor. Bez wstępów typu „Oczywiście!” i bez powtarzania pytania.
-- Opierasz się na notatce poniżej. Gdy czegoś w niej nie ma, korzystasz z własnej wiedzy i mówisz, że tego w notatce nie było.
+- Prostym, naturalnym polskim, z przykładem, gdy to pomaga zrozumieć.
 - Jeśli nie jesteś pewien faktu, daty albo liczby, powiedz to wprost zamiast zgadywać.
 - Formatowanie: zwykły tekst, listy z myślnikami, **pogrubienie** dla najważniejszych słów. Bez tabel, bez nagłówków i bez LaTeX-a: strzałki i znaki pisz wprost (→, ⇌, ·, ², ₂).
 - Nie zmieniasz notatki sam. Gdy uczeń prosi o tekst do notatki, napisz go gotowy do wklejenia; wstawi go przyciskiem „Wstaw do notatki”.
@@ -34,7 +38,7 @@ function noteOf(p) {
   let text = String(p.blocks || "").replace(/^\[\d+\] /gm, "").trim();
   if (text.length > NOTE_LIMIT) text = text.slice(0, NOTE_LIMIT).replace(/\s\S*$/, "") + "\n(dalsza część notatki jest ucięta)";
   const head = [p.subject ? `Przedmiot: ${p.subject}` : "", p.title ? `Temat: ${p.title}` : "", p.date ? `Data lekcji: ${p.date}` : ""].filter(Boolean).join("\n");
-  return `${head}\n\nNOTATKA:\n${text || "(pusta kartka)"}`;
+  return `<kartka>\n${head}\n\n${text || "(kartka jest pusta)"}\n</kartka>`;
 }
 
 function clip(text, limit) {
@@ -64,7 +68,7 @@ async function failure(r) {
 }
 
 async function stream(messages, onText, signal, maxTokens) {
-  const r = await fetch(LLM, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ messages, stream: true, cache_prompt: true, max_tokens: maxTokens, temperature: 0.5, top_p: 0.9 }), signal });
+  const r = await fetch(LLM, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ messages, stream: true, cache_prompt: true, max_tokens: maxTokens, temperature: 0.5, top_p: 0.9, stop: ["<kartka", "</kartka"] }), signal });
   if (!r.ok) throw await failure(r);
   const reader = r.body.getReader();
   const dec = new TextDecoder();
@@ -93,7 +97,7 @@ export async function localChat(payload, onEvent, signal) {
   if (status && !status.hasModel) throw new Error(`Nie ma jeszcze pliku modelu lokalnego (${LOCAL_LABEL}).`);
   onEvent({ t: "status", text: status && status.running ? "czytam notatkę" : "budzę model lokalny" });
   let first = true;
-  const slow = setTimeout(() => { if (first) onEvent({ t: "status", text: "czytam notatkę, pierwsze pytanie trwa najdłużej" }); }, 9000);
+  const slow = setTimeout(() => { if (first) onEvent({ t: "wait", text: "Pierwsze pytanie przy tej kartce trwa najdłużej, kolejne idą szybciej." }); }, 9000);
   try {
     await stream(conversation(payload), (text) => {
       if (first) { first = false; text = text.replace(/^\s+/, ""); }
